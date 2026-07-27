@@ -34,6 +34,9 @@ jobs:
         with:
           gradle-version: "9.5.0"
 
+      - name: Prepare stable test signing key
+        run: base64 --decode .github/ci/dioonplus-test.jks.b64 > .github/ci/dioonplus-test.jks
+
       - name: Read app version
         id: version
         run: |
@@ -56,7 +59,7 @@ jobs:
         run: |
           tag="v${VERSION}"
           apk="release/DioonPlus-v${VERSION}.apk"
-          notes="نسخة وظيفية من ديون بلس: حفظ محلي للعملاء والموردين، حركات أعطيت وأخذت، حساب الأرصدة، تقارير فعلية، تصدير ومشاركة PDF، رمز PIN، ونسخ احتياطي واستعادة."
+          notes="نسخة ديون بلس ${VERSION}: إصلاح فتح لوحة المفاتيح تلقائياً، وحماية الأزرار السفلية من التداخل مع أزرار الهاتف، مع توقيع اختبار ثابت للتحديثات القادمة."
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber
             gh release edit "$tag" --title "ديون بلس $tag" --notes "$notes" --latest

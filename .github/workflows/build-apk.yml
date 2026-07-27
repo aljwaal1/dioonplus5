@@ -36,6 +36,9 @@ jobs:
         with:
           gradle-version: "9.5.0"
 
+      - name: Prepare stable test signing key
+        run: base64 --decode .github/ci/dioonplus-test.jks.b64 > .github/ci/dioonplus-test.jks
+
       - name: Read app version
         id: version
         run: |
