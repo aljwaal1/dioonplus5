@@ -1,0 +1,32 @@
+name: Apply UX Currency Patch
+
+on:
+  push:
+    branches: ["fix/ime-form-visibility"]
+    paths:
+      - "tools/apply_ux_currency_patch.py"
+      - ".github/workflows/apply-ux-currency-patch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/ime-form-visibility
+
+      - name: Apply patch
+        run: python tools/apply_ux_currency_patch.py
+
+      - name: Commit patched application
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Improve keyboard forms and add selectable currencies [skip ci]"
+          git push origin HEAD:fix/ime-form-visibility
