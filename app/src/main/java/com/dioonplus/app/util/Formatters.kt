@@ -9,6 +9,7 @@ import java.util.Locale
 private val arabicLocale = Locale("ar", "JO")
 
 fun formatMoney(cents: Long, includeSign: Boolean = false): String {
+    val currency = CurrencySettings.current
     val formatter = NumberFormat.getNumberInstance(arabicLocale).apply {
         minimumFractionDigits = if (cents % 100L == 0L) 0 else 2
         maximumFractionDigits = 2
@@ -21,7 +22,7 @@ fun formatMoney(cents: Long, includeSign: Boolean = false): String {
         cents < 0 -> "−"
         else -> ""
     }
-    return "$sign${formatter.format(absolute)} د.أ"
+    return "$sign${formatter.format(absolute)} ${currency.symbol}"
 }
 
 fun parseMoneyToCents(value: String): Long? {
