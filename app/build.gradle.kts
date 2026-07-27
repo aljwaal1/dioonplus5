@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val ciTestKeystore = rootProject.file(".github/ci/dioonplus-test.jks")
+
 android {
     namespace = "com.dioonplus.app"
     compileSdk = 36
@@ -11,11 +13,30 @@ android {
         applicationId = "com.dioonplus.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+    }
+
+    signingConfigs {
+        if (ciTestKeystore.exists()) {
+            create("ciTest") {
+                storeFile = ciTestKeystore
+                storePassword = "dioonplus-test-2026"
+                keyAlias = "dioonplus-test"
+                keyPassword = "dioonplus-test-2026"
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (ciTestKeystore.exists()) {
+                signingConfig = signingConfigs.getByName("ciTest")
+            }
+        }
     }
 
     buildFeatures {
