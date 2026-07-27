@@ -1,5 +1,7 @@
 package com.dioonplus.app.ui.screens
 
+import android.media.AudioManager
+import android.media.ToneGenerator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,24 +19,31 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material.icons.outlined.PeopleOutline
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,8 +52,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.dioonplus.app.DioonAppState
+import com.dioonplus.app.data.Party
+import com.dioonplus.app.data.PartyType
 import com.dioonplus.app.ui.theme.BorderColor
 import com.dioonplus.app.ui.theme.DebtRed
 import com.dioonplus.app.ui.theme.DebtRedSoft
@@ -54,26 +67,15 @@ import com.dioonplus.app.ui.theme.DioonBlueSoft
 import com.dioonplus.app.ui.theme.SuccessGreen
 import com.dioonplus.app.ui.theme.SuccessGreenSoft
 import com.dioonplus.app.ui.theme.TextSecondary
-
-private data class LedgerPerson(
-    val name: String,
-    val lastActivity: String,
-    val amount: String,
-    val isOwedToUser: Boolean,
-    val initials: String,
-)
-
-private val sampleCustomers = listOf(
-    LedgerPerson("أحمد الخطيب", "آخر حركة اليوم، 10:25", "1,250 د.أ", true, "أخ"),
-    LedgerPerson("محمد سالم", "آخر حركة أمس", "480 د.أ", false, "مس"),
-    LedgerPerson("سارة محمود", "آخر حركة منذ 3 أيام", "325 د.أ", true, "سم"),
-    LedgerPerson("متجر النور", "آخر حركة منذ أسبوع", "1,840 د.أ", false, "من"),
-)
+import com.dioonplus.app.util.formatDateTime
+import com.dioonplus.app.util.formatMoney
 
 @Composable
-fun HomeScreen(contentPadding: PaddingValues) {
-    var selectedLedger by remember { mutableIntStateOf(0) }
-    var search by remember { mutableStateOf("") }
+fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var balancesVisible by remember { mutableStateOf(true) }
+    val tone = remember { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 40) }
+    DisposableEffect(Unit) { onDispose { tone.release() } }
 
     Box(
         modifier = Modifier
@@ -86,12 +88,24 @@ fun HomeScreen(contentPadding: PaddingValues) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item { HomeHeader() }
-            item { LedgerTabs(selectedLedger = selectedLedger, onSelected = { selectedLedger = it }) }
-            item { OverviewCard() }
+            item {
+                LedgerTabs(
+                    selectedType = appState.selectedPartyType,
+                    onSelected = appState::selectPartyType,
+                )
+            }
+            item {
+                OverviewCard(
+                    receivableCents = appState.summary.receivableCents,
+                    payableCents = appState.summary.payableCents,
+                    balancesVisible = balancesVisible,
+                    onToggleVisibility = { balancesVisible = !balancesVisible },
+                )
+            }
             item {
                 TextField(
-                    value = search,
-                    onValueChange = { search = it },
+                    value = appState.searchQuery,
+                    onValueChange = appState::updateSearch,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("ابحث بالاسم أو رقم الهاتف") },
@@ -113,30 +127,60 @@ fun HomeScreen(contentPadding: PaddingValues) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = if (selectedLedger == 0) "العملاء" else "الموردون",
+                        text = if (appState.selectedPartyType == PartyType.CUSTOMER) "العملاء" else "الموردون",
                         style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
-                        text = "${sampleCustomers.size} حسابات",
+                        text = "${appState.parties.size} حسابات",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                     )
                 }
             }
-            items(sampleCustomers.filter { it.name.contains(search, ignoreCase = true) }) { person ->
-                PersonCard(person)
+            if (appState.parties.isEmpty()) {
+                item {
+                    EmptyPartiesCard(
+                        type = appState.selectedPartyType,
+                        onAdd = { showAddDialog = true },
+                    )
+                }
+            } else {
+                items(appState.parties, key = { it.id }) { party ->
+                    PartyCard(
+                        party = party,
+                        balancesVisible = balancesVisible,
+                        onClick = { appState.openParty(party.id) },
+                    )
+                }
             }
         }
 
         ExtendedFloatingActionButton(
-            onClick = { },
+            onClick = { showAddDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(18.dp),
             containerColor = DioonBlue,
             contentColor = Color.White,
             icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-            text = { Text(if (selectedLedger == 0) "إضافة عميل" else "إضافة مورد") },
+            text = {
+                Text(if (appState.selectedPartyType == PartyType.CUSTOMER) "إضافة عميل" else "إضافة مورد")
+            },
+        )
+    }
+
+    if (showAddDialog) {
+        AddPartyDialog(
+            type = appState.selectedPartyType,
+            onDismiss = { showAddDialog = false },
+            onSave = { name, phone ->
+                val saved = appState.addParty(name, phone, appState.selectedPartyType)
+                if (saved) {
+                    tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
+                    showAddDialog = false
+                }
+                saved
+            },
         )
     }
 }
@@ -160,7 +204,7 @@ private fun HomeHeader() {
             }
             Spacer(Modifier.size(12.dp))
             Column {
-                Text("صباح الخير", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                Text("مرحباً بك", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 Text("دفتر حساباتي", style = MaterialTheme.typography.titleLarge, color = DioonBlueDark)
             }
         }
@@ -171,7 +215,7 @@ private fun HomeHeader() {
 }
 
 @Composable
-private fun LedgerTabs(selectedLedger: Int, onSelected: (Int) -> Unit) {
+private fun LedgerTabs(selectedType: PartyType, onSelected: (PartyType) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
@@ -179,14 +223,17 @@ private fun LedgerTabs(selectedLedger: Int, onSelected: (Int) -> Unit) {
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
     ) {
         Row(modifier = Modifier.padding(4.dp)) {
-            listOf("العملاء", "الموردون").forEachIndexed { index, title ->
-                val selected = selectedLedger == index
+            listOf(
+                PartyType.CUSTOMER to "العملاء",
+                PartyType.SUPPLIER to "الموردون",
+            ).forEach { (type, title) ->
+                val selected = selectedType == type
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (selected) DioonBlue else Color.Transparent)
-                        .clickable { onSelected(index) }
+                        .clickable { onSelected(type) }
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -202,7 +249,12 @@ private fun LedgerTabs(selectedLedger: Int, onSelected: (Int) -> Unit) {
 }
 
 @Composable
-private fun OverviewCard() {
+private fun OverviewCard(
+    receivableCents: Long,
+    payableCents: Long,
+    balancesVisible: Boolean,
+    onToggleVisibility: () -> Unit,
+) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -217,23 +269,29 @@ private fun OverviewCard() {
             ) {
                 Column {
                     Text("ملخص الحسابات", style = MaterialTheme.typography.titleMedium)
-                    Text("محدّث الآن", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                    Text("محفوظ محلياً على جهازك", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
-                Icon(Icons.Outlined.VisibilityOff, contentDescription = "إخفاء الأرصدة", tint = TextSecondary)
+                IconButton(onClick = onToggleVisibility) {
+                    Icon(
+                        if (balancesVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        contentDescription = if (balancesVisible) "إخفاء الأرصدة" else "إظهار الأرصدة",
+                        tint = TextSecondary,
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OverviewMetric(
                     modifier = Modifier.weight(1f),
-                    label = "لك عند العملاء",
-                    value = "3,415 د.أ",
+                    label = "لك عند الآخرين",
+                    value = if (balancesVisible) formatMoney(receivableCents) else "••••",
                     valueColor = SuccessGreen,
                     background = SuccessGreenSoft,
                 )
                 OverviewMetric(
                     modifier = Modifier.weight(1f),
-                    label = "عليك للموردين",
-                    value = "2,320 د.أ",
+                    label = "عليك للآخرين",
+                    value = if (balancesVisible) formatMoney(payableCents) else "••••",
                     valueColor = DebtRed,
                     background = DebtRedSoft,
                 )
@@ -249,7 +307,11 @@ private fun OverviewCard() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text("صافي الرصيد", color = DioonBlueDark, fontWeight = FontWeight.SemiBold)
-                    Text("+1,095 د.أ", color = DioonBlue, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (balancesVisible) formatMoney(receivableCents - payableCents, includeSign = true) else "••••",
+                        color = DioonBlue,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
@@ -274,11 +336,12 @@ private fun OverviewMetric(
 }
 
 @Composable
-private fun PersonCard(person: LedgerPerson) {
+private fun PartyCard(party: Party, balancesVisible: Boolean, onClick: () -> Unit) {
+    val accent = if (party.balanceCents >= 0) SuccessGreen else DebtRed
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { },
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
@@ -294,27 +357,37 @@ private fun PersonCard(person: LedgerPerson) {
                     .background(DioonBlueSoft),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(person.initials, color = DioonBlueDark, fontWeight = FontWeight.Bold)
+                Text(initials(party.name), color = DioonBlueDark, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = person.name,
+                    text = party.name,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(3.dp))
-                Text(person.lastActivity, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                Text(
+                    party.lastActivityAt?.let { "آخر حركة ${formatDateTime(it)}" } ?: "لا توجد حركات بعد",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = person.amount,
+                    text = if (balancesVisible) formatMoney(party.balanceCents) else "••••",
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (person.isOwedToUser) SuccessGreen else DebtRed,
+                    color = accent,
                 )
                 Text(
-                    text = if (person.isOwedToUser) "عليه لك" else "له عليك",
+                    text = when {
+                        party.balanceCents > 0 -> "عليه لك"
+                        party.balanceCents < 0 -> "له عليك"
+                        else -> "متوازن"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
@@ -322,3 +395,90 @@ private fun PersonCard(person: LedgerPerson) {
         }
     }
 }
+
+@Composable
+private fun EmptyPartiesCard(type: PartyType, onAdd: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.White,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+    ) {
+        Column(
+            modifier = Modifier.padding(30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(Icons.Outlined.PeopleOutline, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(40.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (type == PartyType.CUSTOMER) "لا يوجد عملاء بعد" else "لا يوجد موردون بعد",
+                fontWeight = FontWeight.Bold,
+            )
+            Text("ابدأ بإضافة أول حساب ثم سجّل الحركات", color = TextSecondary)
+            Spacer(Modifier.height(14.dp))
+            Button(onClick = onAdd) {
+                Icon(Icons.Outlined.Add, contentDescription = null)
+                Spacer(Modifier.size(6.dp))
+                Text(if (type == PartyType.CUSTOMER) "إضافة عميل" else "إضافة مورد")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddPartyDialog(
+    type: PartyType,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Boolean,
+) {
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (type == PartyType.CUSTOMER) "إضافة عميل" else "إضافة مورد") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        nameError = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("الاسم") },
+                    singleLine = true,
+                    isError = nameError,
+                    supportingText = if (nameError) ({ Text("الاسم مطلوب") }) else null,
+                )
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it.filter { character -> character.isDigit() || character == '+' || character == ' ' } },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("رقم الهاتف - اختياري") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    nameError = name.isBlank()
+                    if (!nameError) onSave(name, phone)
+                },
+            ) { Text("حفظ") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("إلغاء") }
+        },
+    )
+}
+
+private fun initials(name: String): String = name
+    .trim()
+    .split(Regex("\\s+"))
+    .filter { it.isNotBlank() }
+    .take(2)
+    .joinToString("") { it.take(1) }
+    .ifBlank { "ح" }
