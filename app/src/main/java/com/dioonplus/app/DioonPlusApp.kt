@@ -1,6 +1,8 @@
 package com.dioonplus.app
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Assessment
 import androidx.compose.material.icons.outlined.Home
@@ -84,8 +86,10 @@ fun DioonPlusApp() {
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
                         NavigationBar(
+                            modifier = Modifier.navigationBarsPadding(),
                             tonalElevation = 6.dp,
                             containerColor = MaterialTheme.colorScheme.surface,
+                            windowInsets = WindowInsets(0, 0, 0, 0),
                         ) {
                             destinations.forEachIndexed { index, item ->
                                 NavigationBarItem(
