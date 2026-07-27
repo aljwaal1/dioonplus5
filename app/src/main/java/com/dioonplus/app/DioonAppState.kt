@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.dioonplus.app.data.BackupService
 import com.dioonplus.app.data.DailyTotal
 import com.dioonplus.app.data.DashboardSummary
 import com.dioonplus.app.data.EntryType
@@ -14,6 +15,8 @@ import com.dioonplus.app.data.PartyType
 import com.dioonplus.app.data.ReportRow
 
 class DioonAppState(private val database: LedgerDatabase) {
+    private val backupService = BackupService(database)
+
     var selectedPartyType by mutableStateOf(PartyType.CUSTOMER)
         private set
     var searchQuery by mutableStateOf("")
@@ -92,6 +95,16 @@ class DioonAppState(private val database: LedgerDatabase) {
             refreshSelectedParty(partyId)
             refreshAll(keepSelectedParty = true)
         }
+    }
+
+    fun exportBackup(): String = backupService.exportJson()
+
+    fun importBackup(json: String): Boolean = execute {
+        backupService.importJson(json)
+        selectedParty = null
+        entries.clear()
+        searchQuery = ""
+        refreshAll()
     }
 
     fun dismissError() {
