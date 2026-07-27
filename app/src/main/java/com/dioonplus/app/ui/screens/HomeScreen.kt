@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -43,15 +44,21 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -425,6 +432,7 @@ private fun EmptyPartiesCard(type: PartyType, onAdd: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun AddPartyDialog(
     type: PartyType,
@@ -434,6 +442,15 @@ private fun AddPartyDialog(
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
+    val nameFocusRequester = remember { FocusRequester() }
+    val phoneFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        nameFocusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (type == PartyType.CUSTOMER) "إضافة عميل" else "إضافة مورد") },
@@ -445,19 +462,39 @@ private fun AddPartyDialog(
                         name = it
                         nameError = false
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(nameFocusRequester),
                     label = { Text("الاسم") },
                     singleLine = true,
                     isError = nameError,
                     supportingText = if (nameError) ({ Text("الاسم مطلوب") }) else null,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onNext = { phoneFocusRequester.requestFocus() },
+                    ),
                 )
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it.filter { character -> character.isDigit() || character == '+' || character == ' ' } },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(phoneFocusRequester),
                     label = { Text("رقم الهاتف - اختياري") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Phone,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            nameError = name.isBlank()
+                            if (!nameError) {
+                                keyboardController?.hide()
+                                onSave(name, phone)
+                            }
+                        },
+                    ),
                 )
             }
         },
@@ -465,7 +502,10 @@ private fun AddPartyDialog(
             Button(
                 onClick = {
                     nameError = name.isBlank()
-                    if (!nameError) onSave(name, phone)
+                    if (!nameError) {
+                        keyboardController?.hide()
+                        onSave(name, phone)
+                    }
                 },
             ) { Text("حفظ") }
         },
