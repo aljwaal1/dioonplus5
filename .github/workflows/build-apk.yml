@@ -29,9 +29,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK packages
-        run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;36.0.0"
+        run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" >/dev/null
 
       - name: Set up Gradle 9.5
         uses: gradle/actions/setup-gradle@v4
@@ -39,14 +37,38 @@ jobs:
           gradle-version: "9.5.0"
 
       - name: Build debug APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        id: apk_build
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --console=plain :app:assembleDebug > build.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DioonPlus-Build-Log
+          path: build.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Show build error
+        if: steps.apk_build.outputs.exit_code != '0'
+        run: |
+          tail -n 120 build.log
+          exit 1
 
       - name: Rename APK
+        if: steps.apk_build.outputs.exit_code == '0'
         run: |
           mkdir -p release
           cp app/build/outputs/apk/debug/app-debug.apk release/DioonPlus-v0.1.0-debug.apk
 
       - name: Upload APK
+        if: steps.apk_build.outputs.exit_code == '0'
         uses: actions/upload-artifact@v4
         with:
           name: DioonPlus-Android-APK
