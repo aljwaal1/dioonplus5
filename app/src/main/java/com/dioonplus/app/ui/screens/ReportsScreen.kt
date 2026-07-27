@@ -1,5 +1,9 @@
 package com.dioonplus.app.ui.screens
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,12 +18,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -30,13 +35,21 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import com.dioonplus.app.DioonAppState
+import com.dioonplus.app.data.DailyTotal
+import com.dioonplus.app.data.EntryType
+import com.dioonplus.app.data.ReportRow
+import com.dioonplus.app.report.PdfReportExporter
 import com.dioonplus.app.ui.theme.BorderColor
 import com.dioonplus.app.ui.theme.DebtRed
 import com.dioonplus.app.ui.theme.DebtRedSoft
@@ -46,9 +59,33 @@ import com.dioonplus.app.ui.theme.DioonBlueSoft
 import com.dioonplus.app.ui.theme.SuccessGreen
 import com.dioonplus.app.ui.theme.SuccessGreenSoft
 import com.dioonplus.app.ui.theme.TextSecondary
+import com.dioonplus.app.util.fileSafeDate
+import com.dioonplus.app.util.formatDateTime
+import com.dioonplus.app.util.formatDay
+import com.dioonplus.app.util.formatMoney
 
 @Composable
-fun ReportsScreen(contentPadding: PaddingValues) {
+fun ReportsScreen(contentPadding: PaddingValues, appState: DioonAppState) {
+    val context = LocalContext.current
+    val rows = appState.reportRows
+    val totalGave = remember(rows.toList()) { rows.filter { it.entryType == EntryType.GAVE }.sumOf { it.amountCents } }
+    val totalTook = remember(rows.toList()) { rows.filter { it.entryType == EntryType.TOOK }.sumOf { it.amountCents } }
+    val createPdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    PdfReportExporter.write(stream, rows.toList(), appState.summary)
+                } ?: error("تعذر فتح الملف")
+            }.onSuccess {
+                Toast.makeText(context, "تم حفظ التقرير بنجاح", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "تعذر حفظ التقرير", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -58,18 +95,70 @@ fun ReportsScreen(contentPadding: PaddingValues) {
     ) {
         item {
             Text("التقارير", style = MaterialTheme.typography.headlineMedium, color = DioonBlueDark)
-            Text("صورة واضحة عن حركة ديونك ودفعاتك", color = TextSecondary)
+            Text("تقارير فعلية مبنية على الحركات المحفوظة", color = TextSecondary)
         }
-        item { DateRangeCard() }
-        item { ReportSummary() }
-        item { ActivityChartCard() }
-        item { PdfPreviewCard() }
-        item { ExportActions() }
+        item { PeriodCard(rows.toList()) }
+        item {
+            ReportSummary(
+                gaveCents = totalGave,
+                tookCents = totalTook,
+                netCents = appState.summary.netCents,
+            )
+        }
+        item { ActivityChartCard(appState.dailyTotals.toList()) }
+        item {
+            ExportCard(
+                transactionCount = rows.size,
+                onExport = {
+                    createPdfLauncher.launch("DioonPlus-report-${fileSafeDate()}.pdf")
+                },
+                onShare = {
+                    runCatching {
+                        val file = PdfReportExporter.createShareFile(context, rows.toList(), appState.summary)
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.files",
+                            file,
+                        )
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "مشاركة تقرير ديون بلس"))
+                    }.onFailure {
+                        Toast.makeText(context, "تعذر تجهيز التقرير للمشاركة", Toast.LENGTH_LONG).show()
+                    }
+                },
+            )
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("أحدث الحركات", style = MaterialTheme.typography.titleLarge)
+                Text("${rows.size} حركة", color = TextSecondary)
+            }
+        }
+        if (rows.isEmpty()) {
+            item { EmptyReportCard() }
+        } else {
+            items(rows.take(12), key = { it.entryId }) { row ->
+                ReportTransactionCard(row)
+            }
+        }
     }
 }
 
 @Composable
-private fun DateRangeCard() {
+private fun PeriodCard(rows: List<ReportRow>) {
+    val period = when {
+        rows.isEmpty() -> "لا توجد بيانات حتى الآن"
+        rows.size == 1 -> formatDateTime(rows.first().createdAt)
+        else -> "من ${formatDateTime(rows.last().createdAt)} إلى ${formatDateTime(rows.first().createdAt)}"
+    }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
@@ -79,34 +168,30 @@ private fun DateRangeCard() {
         Row(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(DioonBlueSoft, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = DioonBlue)
-                }
-                Spacer(Modifier.size(10.dp))
-                Column {
-                    Text("هذا الشهر", fontWeight = FontWeight.SemiBold)
-                    Text("1 يوليو - 31 يوليو 2026", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                }
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(DioonBlueSoft, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = DioonBlue)
             }
-            Icon(Icons.Outlined.FilterAlt, contentDescription = "تصفية", tint = DioonBlueDark)
+            Spacer(Modifier.size(10.dp))
+            Column {
+                Text("كل الحركات", fontWeight = FontWeight.SemiBold)
+                Text(period, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            }
         }
     }
 }
 
 @Composable
-private fun ReportSummary() {
+private fun ReportSummary(gaveCents: Long, tookCents: Long, netCents: Long) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        MetricCard(Modifier.weight(1f), "الديون", "4,920", DebtRed, DebtRedSoft)
-        MetricCard(Modifier.weight(1f), "الدفعات", "3,825", SuccessGreen, SuccessGreenSoft)
-        MetricCard(Modifier.weight(1f), "الصافي", "+1,095", DioonBlue, DioonBlueSoft)
+        MetricCard(Modifier.weight(1f), "أعطيت", formatMoney(gaveCents), SuccessGreen, SuccessGreenSoft)
+        MetricCard(Modifier.weight(1f), "أخذت", formatMoney(tookCents), DebtRed, DebtRedSoft)
+        MetricCard(Modifier.weight(1f), "الصافي", formatMoney(netCents, includeSign = true), DioonBlue, DioonBlueSoft)
     }
 }
 
@@ -121,15 +206,14 @@ private fun MetricCard(
     Surface(modifier = modifier, color = soft, shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 13.dp)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-            Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleMedium, color = accent)
-            Text("د.أ", style = MaterialTheme.typography.bodyMedium, color = accent)
+            Spacer(Modifier.height(5.dp))
+            Text(value, style = MaterialTheme.typography.titleMedium, color = accent, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
-private fun ActivityChartCard() {
+private fun ActivityChartCard(totals: List<DailyTotal>) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -144,19 +228,19 @@ private fun ActivityChartCard() {
             ) {
                 Column {
                     Text("حركة آخر 7 أيام", style = MaterialTheme.typography.titleMedium)
-                    Text("مقارنة الديون بالدفعات", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                    Text("مقارنة أعطيت بأخذت", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LegendDot(DebtRed, "ديون")
-                    LegendDot(SuccessGreen, "دفعات")
+                    LegendDot(SuccessGreen, "أعطيت")
+                    LegendDot(DebtRed, "أخذت")
                 }
             }
             Spacer(Modifier.height(18.dp))
-            BarChart()
+            RealBarChart(totals)
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                listOf("س", "ح", "ن", "ث", "ر", "خ", "ج").forEach {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                totals.forEach { total ->
+                    Text(formatDay(total.dayStartMillis), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
             }
         }
@@ -173,30 +257,32 @@ private fun LegendDot(color: Color, text: String) {
 }
 
 @Composable
-private fun BarChart() {
-    val debt = listOf(0.55f, 0.78f, 0.44f, 0.90f, 0.60f, 0.72f, 0.48f)
-    val paid = listOf(0.38f, 0.62f, 0.70f, 0.50f, 0.82f, 0.58f, 0.76f)
+private fun RealBarChart(totals: List<DailyTotal>) {
+    val maxValue = totals.maxOfOrNull { maxOf(it.gaveCents, it.tookCents) }?.coerceAtLeast(1L) ?: 1L
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(150.dp),
     ) {
-        val groupWidth = size.width / debt.size
+        if (totals.isEmpty()) return@Canvas
+        val groupWidth = size.width / totals.size
         val baseline = size.height
         val barWidth = groupWidth * 0.18f
-        debt.indices.forEach { index ->
+        totals.forEachIndexed { index, total ->
             val center = groupWidth * index + groupWidth / 2
+            val gaveRatio = total.gaveCents.toFloat() / maxValue.toFloat()
+            val tookRatio = total.tookCents.toFloat() / maxValue.toFloat()
             drawLine(
-                color = DebtRed.copy(alpha = 0.85f),
+                color = SuccessGreen.copy(alpha = 0.88f),
                 start = Offset(center - barWidth, baseline),
-                end = Offset(center - barWidth, baseline - size.height * debt[index]),
+                end = Offset(center - barWidth, baseline - size.height * gaveRatio),
                 strokeWidth = barWidth,
                 cap = StrokeCap.Round,
             )
             drawLine(
-                color = SuccessGreen.copy(alpha = 0.85f),
+                color = DebtRed.copy(alpha = 0.88f),
                 start = Offset(center + barWidth, baseline),
-                end = Offset(center + barWidth, baseline - size.height * paid[index]),
+                end = Offset(center + barWidth, baseline - size.height * tookRatio),
                 strokeWidth = barWidth,
                 cap = StrokeCap.Round,
             )
@@ -205,7 +291,11 @@ private fun BarChart() {
 }
 
 @Composable
-private fun PdfPreviewCard() {
+private fun ExportCard(
+    transactionCount: Int,
+    onExport: () -> Unit,
+    onShare: () -> Unit,
+) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -213,59 +303,41 @@ private fun PdfPreviewCard() {
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            Text("معاينة تقرير PDF", style = MaterialTheme.typography.titleMedium)
-            Text("شكل واضح واحترافي يصلح للطباعة والمشاركة", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-            Spacer(Modifier.height(14.dp))
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(DioonBlue, RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text("د+", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(Modifier.size(8.dp))
-                            Column {
-                                Text("ديون بلس", fontWeight = FontWeight.Bold, color = DioonBlueDark)
-                                Text("كشف حركة الحساب", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                            }
-                        }
-                        Text("رقم #00024", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                    }
-                    Spacer(Modifier.height(14.dp))
-                    Surface(color = DioonBlueSoft, shape = RoundedCornerShape(10.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text("العميل: أحمد الخطيب", fontWeight = FontWeight.SemiBold)
-                            Text("الرصيد: 1,250 د.أ", color = DioonBlue, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    PreviewTableRow("22 يوليو", "دفعة", "250", SuccessGreen)
-                    PreviewTableRow("18 يوليو", "دين", "500", DebtRed)
-                    PreviewTableRow("10 يوليو", "دين", "1,000", DebtRed)
-                    Spacer(Modifier.height(10.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("3 معاملات", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                        Text("صفحة 1 من 1", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(DioonBlueSoft, RoundedCornerShape(13.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = DioonBlue)
+                }
+                Spacer(Modifier.size(10.dp))
+                Column {
+                    Text("تقرير PDF احترافي", style = MaterialTheme.typography.titleMedium)
+                    Text("يشمل $transactionCount حركة والملخص المالي", color = TextSecondary)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onExport,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = DioonBlue),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                    Spacer(Modifier.size(7.dp))
+                    Text("حفظ PDF")
+                }
+                OutlinedButton(
+                    onClick = onShare,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Outlined.IosShare, contentDescription = null)
+                    Spacer(Modifier.size(7.dp))
+                    Text("مشاركة")
                 }
             }
         }
@@ -273,40 +345,49 @@ private fun PdfPreviewCard() {
 }
 
 @Composable
-private fun PreviewTableRow(date: String, type: String, amount: String, color: Color) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+private fun ReportTransactionCard(row: ReportRow) {
+    val gave = row.entryType == EntryType.GAVE
+    val accent = if (gave) SuccessGreen else DebtRed
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
     ) {
-        Text(date, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-        Text(type, style = MaterialTheme.typography.bodyMedium)
-        Text("$amount د.أ", style = MaterialTheme.typography.bodyMedium, color = color, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(row.partyName, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (gave) "أعطيت • ${formatDateTime(row.createdAt)}" else "أخذت • ${formatDateTime(row.createdAt)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                )
+                if (row.note.isNotBlank()) Text(row.note, style = MaterialTheme.typography.bodyMedium, color = DioonBlueDark)
+            }
+            Text(formatMoney(row.amountCents), color = accent, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 @Composable
-private fun ExportActions() {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(
-            onClick = { },
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = DioonBlue),
-            shape = RoundedCornerShape(14.dp),
+private fun EmptyReportCard() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.White,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+    ) {
+        Column(
+            modifier = Modifier.padding(30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(Icons.Outlined.FileDownload, contentDescription = null)
-            Spacer(Modifier.size(7.dp))
-            Text("تصدير PDF")
-        }
-        OutlinedButton(
-            onClick = { },
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(14.dp),
-        ) {
-            Icon(Icons.Outlined.IosShare, contentDescription = null)
-            Spacer(Modifier.size(7.dp))
-            Text("مشاركة")
+            Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(40.dp))
+            Spacer(Modifier.height(10.dp))
+            Text("لا توجد بيانات للتقرير", fontWeight = FontWeight.Bold)
+            Text("أضف حساباً وسجّل حركة لتظهر النتائج هنا", color = TextSecondary)
         }
     }
 }
