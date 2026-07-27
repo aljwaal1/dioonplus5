@@ -419,7 +419,7 @@ private fun SetPinDialog(
     fun save() {
         error = when {
             hasExistingPin && !preferences.verifyPin(currentPin) -> "رمز PIN الحالي غير صحيح"
-            !newPin.matches(Regex("\d{4,6}")) -> "الرمز الجديد يجب أن يتكون من 4 إلى 6 أرقام"
+            !newPin.matches(Regex("\\d{4,6}")) -> "الرمز الجديد يجب أن يتكون من 4 إلى 6 أرقام"
             newPin != confirmation -> "الرمزان غير متطابقين"
             else -> null
         }
