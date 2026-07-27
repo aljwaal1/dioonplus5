@@ -39,6 +39,7 @@ import com.dioonplus.app.ui.screens.ReportsScreen
 import com.dioonplus.app.ui.screens.SettingsScreen
 import com.dioonplus.app.ui.theme.DioonBlue
 import com.dioonplus.app.ui.theme.TextSecondary
+import com.dioonplus.app.util.CurrencySettings
 
 private data class BottomDestination(
     val label: String,
@@ -54,6 +55,7 @@ fun DioonPlusApp() {
     val preferences = remember(context.applicationContext) {
         AppPreferences(context.applicationContext)
     }
+    CurrencySettings.current = preferences.currency
     var unlocked by rememberSaveable { mutableStateOf(!preferences.hasPin()) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {

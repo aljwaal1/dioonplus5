@@ -2,6 +2,7 @@ package com.dioonplus.app.security
 
 import android.content.Context
 import android.util.Base64
+import com.dioonplus.app.util.CurrencyOption
 import java.security.MessageDigest
 import java.security.SecureRandom
 
@@ -49,6 +50,10 @@ class AppPreferences(context: Context) {
         get() = preferences.getString(KEY_RECOVERY_EMAIL, "").orEmpty()
         set(value) = preferences.edit().putString(KEY_RECOVERY_EMAIL, value.trim()).apply()
 
+    var currency: CurrencyOption
+        get() = CurrencyOption.fromCode(preferences.getString(KEY_CURRENCY, CurrencyOption.JOD.code))
+        set(value) = preferences.edit().putString(KEY_CURRENCY, value.code).apply()
+
     private fun hashPin(pin: String, salt: ByteArray): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update(salt)
@@ -62,5 +67,6 @@ class AppPreferences(context: Context) {
         private const val KEY_SOUND = "sound_enabled"
         private const val KEY_VIBRATION = "vibration_enabled"
         private const val KEY_RECOVERY_EMAIL = "recovery_email"
+        private const val KEY_CURRENCY = "currency_code"
     }
 }
