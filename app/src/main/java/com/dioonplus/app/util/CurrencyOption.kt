@@ -1,5 +1,6 @@
 package com.dioonplus.app.util
 
+/** Supported display currencies. Stored debt values remain unchanged when this selection changes. */
 enum class CurrencyOption(
     val code: String,
     val arabicName: String,
