@@ -1,0 +1,26 @@
+name: Fix Currency Build
+
+on:
+  push:
+    branches: ["fix/ime-form-visibility"]
+    paths:
+      - "tools/fix_currency_build.py"
+      - ".github/workflows/fix-currency-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/ime-form-visibility
+      - run: python tools/fix_currency_build.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix PIN regex in currency update"
+          git push origin HEAD:fix/ime-form-visibility
