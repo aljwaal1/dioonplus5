@@ -12,11 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -39,16 +42,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.DioonAppState
@@ -81,7 +90,11 @@ fun PartyDetailsScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Surface(color = Color.White, shadowElevation = 2.dp) {
+            Surface(
+                modifier = Modifier.statusBarsPadding(),
+                color = Color.White,
+                shadowElevation = 2.dp,
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -106,7 +119,11 @@ fun PartyDetailsScreen(
             }
         },
         bottomBar = {
-            Surface(color = Color.White, shadowElevation = 8.dp) {
+            Surface(
+                modifier = Modifier.navigationBarsPadding(),
+                color = Color.White,
+                shadowElevation = 8.dp,
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -300,6 +317,7 @@ private fun EntryCard(entry: LedgerEntry, onDelete: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun AddEntryDialog(
     type: EntryType,
@@ -309,6 +327,15 @@ private fun AddEntryDialog(
     var amount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var amountError by remember { mutableStateOf(false) }
+    val amountFocusRequester = remember { FocusRequester() }
+    val noteFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        amountFocusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (type == EntryType.GAVE) "إضافة حركة: أعطيت" else "إضافة حركة: أخذت") },
@@ -320,21 +347,41 @@ private fun AddEntryDialog(
                         amount = it
                         amountError = false
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(amountFocusRequester),
                     label = { Text("المبلغ") },
                     suffix = { Text("د.أ") },
                     singleLine = true,
                     isError = amountError,
                     supportingText = if (amountError) ({ Text("أدخل مبلغاً صحيحاً أكبر من صفر") }) else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { noteFocusRequester.requestFocus() },
+                    ),
                 )
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(noteFocusRequester),
                     label = { Text("ملاحظة اختيارية") },
                     minLines = 2,
                     maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            amountError = parseMoneyToCents(amount) == null
+                            if (!amountError) {
+                                keyboardController?.hide()
+                                onSave(amount, note)
+                            }
+                        },
+                    ),
                 )
             }
         },
@@ -342,7 +389,10 @@ private fun AddEntryDialog(
             Button(
                 onClick = {
                     amountError = parseMoneyToCents(amount) == null
-                    if (!amountError) onSave(amount, note)
+                    if (!amountError) {
+                        keyboardController?.hide()
+                        onSave(amount, note)
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (type == EntryType.GAVE) SuccessGreen else DebtRed,
