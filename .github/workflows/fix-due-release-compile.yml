@@ -1,0 +1,26 @@
+name: Fix Due Release Compile
+
+on:
+  push:
+    branches: ["feature/due-reminders-payments"]
+    paths:
+      - "tools/fix_due_release_compile.py"
+      - ".github/workflows/fix-due-release-compile.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/due-reminders-payments
+      - run: python tools/fix_due_release_compile.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix due release compilation"
+          git push origin HEAD:feature/due-reminders-payments
