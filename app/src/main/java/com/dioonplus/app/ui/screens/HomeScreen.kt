@@ -33,6 +33,8 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -44,6 +46,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -67,6 +70,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.DioonAppState
+import com.dioonplus.app.data.DueItem
 import com.dioonplus.app.data.Party
 import com.dioonplus.app.data.PartyType
 import com.dioonplus.app.ui.theme.BorderColor
@@ -80,10 +84,14 @@ import com.dioonplus.app.ui.theme.SuccessGreenSoft
 import com.dioonplus.app.ui.theme.TextSecondary
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatMoney
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
     var showAddDialog by remember { mutableStateOf(false) }
+    var showDueDialog by remember { mutableStateOf(false) }
     var balancesVisible by remember { mutableStateOf(true) }
     val tone = remember { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 40) }
     DisposableEffect(Unit) { onDispose { tone.release() } }
@@ -98,7 +106,7 @@ fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { HomeHeader() }
+            item { HomeHeader(appState.dueItems.size) { showDueDialog = true } }
             item {
                 LedgerTabs(
                     selectedType = appState.selectedPartyType,
@@ -112,6 +120,9 @@ fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
                     balancesVisible = balancesVisible,
                     onToggleVisibility = { balancesVisible = !balancesVisible },
                 )
+            }
+            if (appState.dueItems.isNotEmpty()) {
+                item { DueSummaryCard(appState.dueSummary.overdueCount, appState.dueSummary.todayCount, appState.dueSummary.upcomingCount) { showDueDialog = true } }
             }
             item {
                 TextField(
@@ -180,6 +191,14 @@ fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
         )
     }
 
+    if (showDueDialog) {
+        DueItemsDialog(
+            items = appState.dueItems,
+            onDismiss = { showDueDialog = false },
+            onOpen = { item -> showDueDialog = false; appState.openParty(item.partyId) },
+        )
+    }
+
     if (showAddDialog) {
         AddPartyDialog(
             type = appState.selectedPartyType,
@@ -197,7 +216,7 @@ fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
 }
 
 @Composable
-private fun HomeHeader() {
+private fun HomeHeader(dueCount: Int, onNotifications: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -219,8 +238,10 @@ private fun HomeHeader() {
                 Text("دفتر حساباتي", style = MaterialTheme.typography.titleLarge, color = DioonBlueDark)
             }
         }
-        IconButton(onClick = { }) {
-            Icon(Icons.Outlined.NotificationsNone, contentDescription = "التنبيهات", tint = DioonBlueDark)
+        IconButton(onClick = onNotifications) {
+            BadgedBox(badge = { if (dueCount > 0) Badge { Text(dueCount.toString()) } }) {
+                Icon(Icons.Outlined.NotificationsNone, contentDescription = "التنبيهات", tint = DioonBlueDark)
+            }
         }
     }
 }
@@ -533,3 +554,41 @@ private fun initials(name: String): String = name
     .take(2)
     .joinToString("") { it.take(1) }
     .ifBlank { "ح" }
+
+
+@Composable
+private fun DueSummaryCard(overdue: Int, today: Int, upcoming: Int, onClick: () -> Unit) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), colors = CardDefaults.elevatedCardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(16.dp)) {
+            Text("الاستحقاقات والتذكيرات", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DueMetric(Modifier.weight(1f), "متأخر", overdue, DebtRedSoft, DebtRed)
+                DueMetric(Modifier.weight(1f), "اليوم", today, DioonBlueSoft, DioonBlue)
+                DueMetric(Modifier.weight(1f), "قادم", upcoming, SuccessGreenSoft, SuccessGreen)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DueMetric(modifier: Modifier, label: String, count: Int, bg: Color, color: Color) {
+    Surface(modifier, color = bg, shape = RoundedCornerShape(12.dp)) { Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(count.toString(), color = color, fontWeight = FontWeight.Bold); Text(label, color = color) } }
+}
+
+@Composable
+private fun DueItemsDialog(items: List<DueItem>, onDismiss: () -> Unit, onOpen: (DueItem) -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("الاستحقاقات") }, text = {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(items, key = { it.entryId }) { item ->
+                Surface(Modifier.fillMaxWidth().clickable { onOpen(item) }, color = Color.White, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(item.partyName, fontWeight = FontWeight.Bold)
+                        Text("المتبقي ${formatMoney(item.remainingCents)}", color = DebtRed)
+                        Text("الاستحقاق ${SimpleDateFormat("d MMM yyyy", Locale("ar")).format(Date(item.dueAt))}", color = TextSecondary)
+                    }
+                }
+            }
+        }
+    }, confirmButton = { TextButton(onDismiss) { Text("إغلاق") } })
+}

@@ -1,7 +1,9 @@
 package com.dioonplus.app.data
 
+/** Core ledger, due-date, and linked-payment models. */
 enum class PartyType { CUSTOMER, SUPPLIER }
 enum class EntryType { GAVE, TOOK }
+enum class DebtStatus { OPEN, PARTIAL, PAID }
 
 data class Party(
     val id: Long,
@@ -19,6 +21,37 @@ data class LedgerEntry(
     val amountCents: Long,
     val note: String,
     val createdAt: Long,
+    val dueAt: Long? = null,
+    val parentEntryId: Long? = null,
+    val paidCents: Long = 0,
+) {
+    val isPayment: Boolean get() = parentEntryId != null
+    val remainingCents: Long get() = if (isPayment) 0 else (amountCents - paidCents).coerceAtLeast(0)
+    val debtStatus: DebtStatus
+        get() = when {
+            isPayment || remainingCents == 0L -> DebtStatus.PAID
+            paidCents > 0L -> DebtStatus.PARTIAL
+            else -> DebtStatus.OPEN
+        }
+}
+
+data class DueItem(
+    val entryId: Long,
+    val partyId: Long,
+    val partyName: String,
+    val partyPhone: String,
+    val entryType: EntryType,
+    val originalCents: Long,
+    val paidCents: Long,
+    val remainingCents: Long,
+    val dueAt: Long,
+    val note: String,
+)
+
+data class DueSummary(
+    val overdueCount: Int = 0,
+    val todayCount: Int = 0,
+    val upcomingCount: Int = 0,
 )
 
 data class DashboardSummary(
