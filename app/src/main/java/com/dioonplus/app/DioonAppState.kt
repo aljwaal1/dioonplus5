@@ -57,7 +57,7 @@ class DioonAppState(private val database: LedgerDatabase) {
 
     fun updateParty(id: Long, name: String, phone: String): Boolean = execute {
         database.updateParty(id, name, phone)
-        refreshAll()
+        refreshAll(keepSelectedParty = true)
         selectedParty = database.getParty(id)
     }
 
@@ -79,10 +79,30 @@ class DioonAppState(private val database: LedgerDatabase) {
         refreshAll()
     }
 
-    fun addEntry(type: EntryType, amountCents: Long, note: String): Boolean {
+    fun addEntry(
+        type: EntryType,
+        amountCents: Long,
+        note: String,
+        createdAt: Long = System.currentTimeMillis(),
+    ): Boolean {
         val partyId = selectedParty?.id ?: return false
         return execute {
-            database.addEntry(partyId, type, amountCents, note)
+            database.addEntry(partyId, type, amountCents, note, createdAt)
+            refreshSelectedParty(partyId)
+            refreshAll(keepSelectedParty = true)
+        }
+    }
+
+    fun updateEntry(
+        entryId: Long,
+        type: EntryType,
+        amountCents: Long,
+        note: String,
+        createdAt: Long,
+    ): Boolean {
+        val partyId = selectedParty?.id ?: return false
+        return execute {
+            database.updateEntry(entryId, type, amountCents, note, createdAt)
             refreshSelectedParty(partyId)
             refreshAll(keepSelectedParty = true)
         }
