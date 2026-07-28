@@ -1,5 +1,6 @@
 package com.dioonplus.app.data
 
+/** Core ledger, due-date, and linked-payment models. */
 enum class PartyType { CUSTOMER, SUPPLIER }
 enum class EntryType { GAVE, TOOK }
 enum class DebtStatus { OPEN, PARTIAL, PAID }
