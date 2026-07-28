@@ -6,102 +6,52 @@ import org.json.JSONObject
 
 class BackupService(private val database: LedgerDatabase) {
     fun exportJson(): String {
-        val root = JSONObject().apply {
-            put("format", "dioonplus-backup")
-            put("version", 1)
-            put("createdAt", System.currentTimeMillis())
-        }
-
+        val root = JSONObject().apply { put("format", "dioonplus-backup"); put("version", 2); put("createdAt", System.currentTimeMillis()) }
         val parties = JSONArray()
-        database.readableDatabase.rawQuery(
-            "SELECT id, name, phone, type, created_at FROM parties ORDER BY id",
-            null,
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                parties.put(
-                    JSONObject().apply {
-                        put("id", cursor.getLong(cursor.getColumnIndexOrThrow("id")))
-                        put("name", cursor.getString(cursor.getColumnIndexOrThrow("name")))
-                        put("phone", cursor.getString(cursor.getColumnIndexOrThrow("phone")))
-                        put("type", cursor.getString(cursor.getColumnIndexOrThrow("type")))
-                        put("createdAt", cursor.getLong(cursor.getColumnIndexOrThrow("created_at")))
-                    },
-                )
-            }
+        database.readableDatabase.rawQuery("SELECT id,name,phone,type,created_at FROM parties ORDER BY id", null).use { c ->
+            while (c.moveToNext()) parties.put(JSONObject().apply {
+                put("id", c.getLong(0)); put("name", c.getString(1)); put("phone", c.getString(2)); put("type", c.getString(3)); put("createdAt", c.getLong(4))
+            })
         }
-
         val entries = JSONArray()
-        database.readableDatabase.rawQuery(
-            "SELECT id, party_id, entry_type, amount_cents, note, created_at FROM ledger_entries ORDER BY id",
-            null,
-        ).use { cursor ->
-            while (cursor.moveToNext()) {
-                entries.put(
-                    JSONObject().apply {
-                        put("id", cursor.getLong(cursor.getColumnIndexOrThrow("id")))
-                        put("partyId", cursor.getLong(cursor.getColumnIndexOrThrow("party_id")))
-                        put("entryType", cursor.getString(cursor.getColumnIndexOrThrow("entry_type")))
-                        put("amountCents", cursor.getLong(cursor.getColumnIndexOrThrow("amount_cents")))
-                        put("note", cursor.getString(cursor.getColumnIndexOrThrow("note")))
-                        put("createdAt", cursor.getLong(cursor.getColumnIndexOrThrow("created_at")))
-                    },
-                )
-            }
+        database.readableDatabase.rawQuery("SELECT id,party_id,entry_type,amount_cents,note,created_at,due_at,parent_entry_id FROM ledger_entries ORDER BY id", null).use { c ->
+            while (c.moveToNext()) entries.put(JSONObject().apply {
+                put("id", c.getLong(0)); put("partyId", c.getLong(1)); put("entryType", c.getString(2)); put("amountCents", c.getLong(3))
+                put("note", c.getString(4)); put("createdAt", c.getLong(5))
+                if (c.isNull(6)) put("dueAt", JSONObject.NULL) else put("dueAt", c.getLong(6))
+                if (c.isNull(7)) put("parentEntryId", JSONObject.NULL) else put("parentEntryId", c.getLong(7))
+            })
         }
-
-        root.put("parties", parties)
-        root.put("entries", entries)
-        return root.toString(2)
+        return root.put("parties", parties).put("entries", entries).toString(2)
     }
 
     fun importJson(json: String) {
         val root = JSONObject(json)
         require(root.optString("format") == "dioonplus-backup") { "الملف ليس نسخة احتياطية من ديون بلس" }
-        require(root.optInt("version") == 1) { "إصدار النسخة الاحتياطية غير مدعوم" }
-        val parties = root.getJSONArray("parties")
-        val entries = root.getJSONArray("entries")
-        require(parties.length() <= 100_000 && entries.length() <= 1_000_000) { "حجم النسخة الاحتياطية غير صالح" }
-
+        val version = root.optInt("version")
+        require(version == 1 || version == 2) { "إصدار النسخة الاحتياطية غير مدعوم" }
+        val parties = root.getJSONArray("parties"); val entries = root.getJSONArray("entries")
         val db = database.writableDatabase
         db.beginTransaction()
         try {
-            db.delete("ledger_entries", null, null)
-            db.delete("parties", null, null)
-
-            for (index in 0 until parties.length()) {
-                val item = parties.getJSONObject(index)
-                val type = PartyType.valueOf(item.getString("type"))
-                val name = item.getString("name").trim()
-                require(name.isNotEmpty()) { "يوجد حساب بدون اسم" }
-                val values = ContentValues().apply {
-                    put("id", item.getLong("id"))
-                    put("name", name)
-                    put("phone", item.optString("phone"))
-                    put("type", type.name)
-                    put("created_at", item.getLong("createdAt"))
-                }
-                db.insertOrThrow("parties", null, values)
+            db.delete("ledger_entries", null, null); db.delete("parties", null, null)
+            for (i in 0 until parties.length()) {
+                val item = parties.getJSONObject(i)
+                db.insertOrThrow("parties", null, ContentValues().apply {
+                    put("id", item.getLong("id")); put("name", item.getString("name").trim()); put("phone", item.optString("phone"))
+                    put("type", PartyType.valueOf(item.getString("type")).name); put("created_at", item.getLong("createdAt"))
+                })
             }
-
-            for (index in 0 until entries.length()) {
-                val item = entries.getJSONObject(index)
-                val entryType = EntryType.valueOf(item.getString("entryType"))
-                val amountCents = item.getLong("amountCents")
-                require(amountCents > 0) { "يوجد مبلغ غير صالح في النسخة" }
-                val values = ContentValues().apply {
-                    put("id", item.getLong("id"))
-                    put("party_id", item.getLong("partyId"))
-                    put("entry_type", entryType.name)
-                    put("amount_cents", amountCents)
-                    put("note", item.optString("note"))
-                    put("created_at", item.getLong("createdAt"))
-                }
-                db.insertOrThrow("ledger_entries", null, values)
+            for (i in 0 until entries.length()) {
+                val item = entries.getJSONObject(i); val amount = item.getLong("amountCents"); require(amount > 0)
+                db.insertOrThrow("ledger_entries", null, ContentValues().apply {
+                    put("id", item.getLong("id")); put("party_id", item.getLong("partyId")); put("entry_type", EntryType.valueOf(item.getString("entryType")).name)
+                    put("amount_cents", amount); put("note", item.optString("note")); put("created_at", item.getLong("createdAt"))
+                    if (version >= 2 && !item.isNull("dueAt")) put("due_at", item.getLong("dueAt")) else putNull("due_at")
+                    if (version >= 2 && !item.isNull("parentEntryId")) put("parent_entry_id", item.getLong("parentEntryId")) else putNull("parent_entry_id")
+                })
             }
-
             db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
+        } finally { db.endTransaction() }
     }
 }

@@ -1,5 +1,9 @@
 package com.dioonplus.app
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -17,6 +21,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,7 +35,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import com.dioonplus.app.data.LedgerDatabase
 import com.dioonplus.app.security.AppPreferences
 import com.dioonplus.app.ui.screens.HomeScreen
 import com.dioonplus.app.ui.screens.PartyDetailsScreen
@@ -50,7 +54,11 @@ private data class BottomDestination(
 fun DioonPlusApp() {
     val context = LocalContext.current
     val appState = remember(context.applicationContext) {
-        DioonAppState(LedgerDatabase(context.applicationContext))
+        DioonAppState(context.applicationContext)
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
     val preferences = remember(context.applicationContext) {
         AppPreferences(context.applicationContext)

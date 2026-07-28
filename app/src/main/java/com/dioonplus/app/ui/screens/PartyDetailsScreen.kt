@@ -4,21 +4,7 @@ import android.app.DatePickerDialog
 import android.media.AudioManager
 import android.media.ToneGenerator
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -28,32 +14,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Phone
-import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -69,36 +32,22 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.DioonAppState
-import com.dioonplus.app.data.EntryType
-import com.dioonplus.app.data.LedgerEntry
-import com.dioonplus.app.data.Party
-import com.dioonplus.app.data.PartyType
-import com.dioonplus.app.ui.theme.BorderColor
-import com.dioonplus.app.ui.theme.DebtRed
-import com.dioonplus.app.ui.theme.DebtRedSoft
-import com.dioonplus.app.ui.theme.DioonBlue
-import com.dioonplus.app.ui.theme.DioonBlueDark
-import com.dioonplus.app.ui.theme.SuccessGreen
-import com.dioonplus.app.ui.theme.SuccessGreenSoft
-import com.dioonplus.app.ui.theme.TextSecondary
+import com.dioonplus.app.data.*
+import com.dioonplus.app.ui.theme.*
 import com.dioonplus.app.util.CurrencySettings
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatMoney
 import com.dioonplus.app.util.parseMoneyToCents
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 @Composable
-fun PartyDetailsScreen(
-    appState: DioonAppState,
-    party: Party,
-    onBack: () -> Unit,
-) {
+fun PartyDetailsScreen(appState: DioonAppState, party: Party, onBack: () -> Unit) {
     var addEntryType by remember { mutableStateOf<EntryType?>(null) }
     var editingEntry by remember { mutableStateOf<LedgerEntry?>(null) }
+    var paymentEntry by remember { mutableStateOf<LedgerEntry?>(null) }
+    var fullSettlementEntry by remember { mutableStateOf<LedgerEntry?>(null) }
     var pendingDeleteEntry by remember { mutableStateOf<LedgerEntry?>(null) }
     var showEditParty by remember { mutableStateOf(false) }
     var showDeleteParty by remember { mutableStateOf(false) }
@@ -109,568 +58,154 @@ fun PartyDetailsScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Surface(
-                modifier = Modifier.statusBarsPadding(),
-                color = Color.White,
-                shadowElevation = 2.dp,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "رجوع")
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
+            Surface(Modifier.statusBarsPadding(), color = Color.White, shadowElevation = 2.dp) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "رجوع") }
+                    Column(Modifier.weight(1f)) {
                         Text(party.name, style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            text = buildString {
-                                append(if (party.type == PartyType.CUSTOMER) "عميل" else "مورد")
-                                if (party.phone.isNotBlank()) append(" • ${party.phone}")
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
-                        )
+                        Text((if (party.type == PartyType.CUSTOMER) "عميل" else "مورد") + if (party.phone.isBlank()) "" else " • ${party.phone}", color = TextSecondary)
                     }
-                    if (party.phone.isNotBlank()) {
-                        Icon(Icons.Outlined.Phone, contentDescription = null, tint = DioonBlueDark)
-                    }
-                    IconButton(onClick = { showEditParty = true }) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "تعديل الحساب", tint = DioonBlue)
-                    }
-                    IconButton(onClick = { showDeleteParty = true }) {
-                        Icon(Icons.Outlined.DeleteOutline, contentDescription = "حذف الحساب", tint = DebtRed)
-                    }
+                    IconButton(onClick = { showEditParty = true }) { Icon(Icons.Outlined.Edit, "تعديل", tint = DioonBlue) }
+                    IconButton(onClick = { showDeleteParty = true }) { Icon(Icons.Outlined.DeleteOutline, "حذف", tint = DebtRed) }
                 }
             }
         },
         bottomBar = {
-            Surface(
-                modifier = Modifier.navigationBarsPadding(),
-                color = Color.White,
-                shadowElevation = 8.dp,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = { addEntryType = EntryType.GAVE },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Text("أعطيت", modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                    Button(
-                        onClick = { addEntryType = EntryType.TOOK },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = DebtRed),
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Text("أخذت", modifier = Modifier.padding(vertical = 4.dp))
-                    }
+            Surface(Modifier.navigationBarsPadding(), color = Color.White, shadowElevation = 8.dp) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button({ addEntryType = EntryType.GAVE }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen), shape = RoundedCornerShape(16.dp)) { Text("أعطيت") }
+                    Button({ addEntryType = EntryType.TOOK }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = DebtRed), shape = RoundedCornerShape(16.dp)) { Text("أخذت") }
                 }
             }
         },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { BalanceCard(party) }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("سجل الحركات", style = MaterialTheme.typography.titleLarge)
-                    Text("${appState.entries.size} حركة", color = TextSecondary)
-                }
-            }
-            if (appState.entries.isEmpty()) {
-                item { EmptyEntriesCard() }
-            } else {
-                items(appState.entries, key = { it.id }) { entry ->
-                    EntryCard(
-                        entry = entry,
-                        onEdit = { editingEntry = entry },
-                        onDelete = { pendingDeleteEntry = entry },
-                    )
-                }
+            val openDebts = appState.entries.count { !it.isPayment && it.remainingCents > 0 }
+            if (openDebts > 0) item { Text("الديون المفتوحة: $openDebts", color = DioonBlueDark, fontWeight = FontWeight.SemiBold) }
+            item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("سجل الحركات", style = MaterialTheme.typography.titleLarge); Text("${appState.entries.size} حركة", color = TextSecondary) } }
+            if (appState.entries.isEmpty()) item { EmptyEntriesCard() }
+            else items(appState.entries, key = { it.id }) { entry ->
+                EntryCard(entry, onEdit = { if (!entry.isPayment) editingEntry = entry }, onDelete = { pendingDeleteEntry = entry }, onPayment = { paymentEntry = entry }, onSettle = { fullSettlementEntry = entry })
             }
         }
     }
 
-    addEntryType?.let { type ->
-        EntryEditorDialog(
-            initialType = type,
-            existingEntry = null,
-            onDismiss = { addEntryType = null },
-            onSave = { selectedType, amount, note, createdAt ->
-                val cents = parseMoneyToCents(amount)
-                if (cents == null) {
-                    false
-                } else {
-                    val saved = appState.addEntry(selectedType, cents, note, createdAt)
-                    if (saved) {
-                        tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        addEntryType = null
-                    }
-                    saved
-                }
-            },
-        )
-    }
+    addEntryType?.let { type -> EntryEditorDialog(type, null, { addEntryType = null }) { selectedType, amount, note, createdAt, dueAt ->
+        val cents = parseMoneyToCents(amount) ?: return@EntryEditorDialog false
+        appState.addEntry(selectedType, cents, note, createdAt, dueAt).also { if (it) { tone.startTone(ToneGenerator.TONE_PROP_ACK, 120); haptic.performHapticFeedback(HapticFeedbackType.LongPress); addEntryType = null } }
+    } }
 
-    editingEntry?.let { entry ->
-        EntryEditorDialog(
-            initialType = entry.type,
-            existingEntry = entry,
-            onDismiss = { editingEntry = null },
-            onSave = { selectedType, amount, note, createdAt ->
-                val cents = parseMoneyToCents(amount)
-                if (cents == null) {
-                    false
-                } else {
-                    val saved = appState.updateEntry(entry.id, selectedType, cents, note, createdAt)
-                    if (saved) {
-                        tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        editingEntry = null
-                    }
-                    saved
-                }
-            },
-        )
-    }
+    editingEntry?.let { entry -> EntryEditorDialog(entry.type, entry, { editingEntry = null }) { selectedType, amount, note, createdAt, dueAt ->
+        val cents = parseMoneyToCents(amount) ?: return@EntryEditorDialog false
+        appState.updateEntry(entry.id, selectedType, cents, note, createdAt, dueAt).also { if (it) editingEntry = null }
+    } }
 
-    if (showEditParty) {
-        EditPartyDialog(
-            party = party,
-            onDismiss = { showEditParty = false },
-            onSave = { name, phone ->
-                val saved = appState.updateParty(party.id, name, phone)
-                if (saved) {
-                    tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
-                    showEditParty = false
-                }
-                saved
-            },
-        )
-    }
+    paymentEntry?.let { entry -> PaymentDialog(entry, { paymentEntry = null }) { amount, note, date ->
+        val cents = parseMoneyToCents(amount) ?: return@PaymentDialog false
+        appState.addPayment(entry.id, cents, note, date).also { if (it) paymentEntry = null }
+    } }
 
-    if (showDeleteParty) {
-        AlertDialog(
-            onDismissRequest = { showDeleteParty = false },
-            title = { Text("حذف ${if (party.type == PartyType.CUSTOMER) "العميل" else "المورد"}؟") },
-            text = {
-                Text(
-                    if (appState.entries.isEmpty()) {
-                        "سيتم حذف الحساب نهائياً."
-                    } else {
-                        "سيتم حذف الحساب وجميع حركاته وعددها ${appState.entries.size}. لا يمكن التراجع بعد التأكيد."
-                    },
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (appState.deleteParty(party.id)) showDeleteParty = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DebtRed),
-                ) { Text("حذف نهائياً") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteParty = false }) { Text("إلغاء") }
-            },
-        )
-    }
+    fullSettlementEntry?.let { entry -> AlertDialog(
+        onDismissRequest = { fullSettlementEntry = null },
+        title = { Text("تسجيل سداد كامل؟") },
+        text = { Text("سيتم تسجيل دفعة بقيمة ${formatMoney(entry.remainingCents)} وإغلاق هذا الدين مع الاحتفاظ بسجله.") },
+        confirmButton = { Button({ if (appState.settleInFull(entry.id)) fullSettlementEntry = null }) { Text("تأكيد السداد") } },
+        dismissButton = { TextButton({ fullSettlementEntry = null }) { Text("إلغاء") } },
+    ) }
 
-    pendingDeleteEntry?.let { entry ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteEntry = null },
-            title = { Text("حذف الحركة؟") },
-            text = {
-                Text(
-                    "سيتم حذف حركة ${if (entry.type == EntryType.GAVE) "أعطيت" else "أخذت"} بقيمة ${formatMoney(entry.amountCents)} وتحديث الرصيد فوراً.",
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (appState.deleteEntry(entry.id)) pendingDeleteEntry = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DebtRed),
-                ) { Text("حذف") }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteEntry = null }) { Text("إلغاء") }
-            },
-        )
+    if (showEditParty) EditPartyDialog(party, { showEditParty = false }) { name, phone -> appState.updateParty(party.id, name, phone).also { if (it) showEditParty = false } }
+    if (showDeleteParty) AlertDialog(onDismissRequest = { showDeleteParty = false }, title = { Text("حذف الحساب؟") }, text = { Text("سيتم حذف الحساب وجميع حركاته ودفعاته نهائياً.") }, confirmButton = { Button({ if (appState.deleteParty(party.id)) showDeleteParty = false }, colors = ButtonDefaults.buttonColors(containerColor = DebtRed)) { Text("حذف نهائياً") } }, dismissButton = { TextButton({ showDeleteParty = false }) { Text("إلغاء") } })
+    pendingDeleteEntry?.let { entry -> AlertDialog(onDismissRequest = { pendingDeleteEntry = null }, title = { Text("حذف الحركة؟") }, text = { Text(if (entry.isPayment) "سيتم حذف دفعة السداد وإعادة المبلغ إلى المتبقي." else "سيتم حذف الدين وجميع الدفعات المرتبطة به.") }, confirmButton = { Button({ if (appState.deleteEntry(entry.id)) pendingDeleteEntry = null }, colors = ButtonDefaults.buttonColors(containerColor = DebtRed)) { Text("حذف") } }, dismissButton = { TextButton({ pendingDeleteEntry = null }) { Text("إلغاء") } })
+}
+
+@Composable private fun BalanceCard(party: Party) {
+    val positive = party.balanceCents >= 0; val accent = if (positive) SuccessGreen else DebtRed; val soft = if (positive) SuccessGreenSoft else DebtRedSoft
+    ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.elevatedCardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(18.dp)) { Text("الرصيد الحالي", color = TextSecondary); Text(formatMoney(party.balanceCents), style = MaterialTheme.typography.headlineMedium, color = accent, fontWeight = FontWeight.ExtraBold); Spacer(Modifier.height(8.dp)); Surface(color = soft, shape = RoundedCornerShape(12.dp)) { Text(when { party.balanceCents > 0 -> "عليه لك"; party.balanceCents < 0 -> "له عليك"; else -> "الحساب متوازن" }, Modifier.padding(12.dp), color = accent) } }
     }
 }
 
-@Composable
-private fun BalanceCard(party: Party) {
-    val positive = party.balanceCents >= 0
-    val accent = if (positive) SuccessGreen else DebtRed
-    val soft = if (positive) SuccessGreenSoft else DebtRedSoft
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Text("الرصيد الحالي", color = TextSecondary)
-            Spacer(Modifier.height(6.dp))
-            Text(
-                formatMoney(party.balanceCents),
-                style = MaterialTheme.typography.headlineMedium,
-                color = accent,
-                fontWeight = FontWeight.ExtraBold,
-            )
-            Spacer(Modifier.height(10.dp))
-            Surface(color = soft, shape = RoundedCornerShape(12.dp)) {
-                Text(
-                    text = when {
-                        party.balanceCents > 0 -> "عليه لك"
-                        party.balanceCents < 0 -> "له عليك"
-                        else -> "الحساب متوازن"
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = accent,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-    }
-}
+@Composable private fun EmptyEntriesCard() { Surface(Modifier.fillMaxWidth(), color = Color.White, shape = RoundedCornerShape(18.dp)) { Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Outlined.ReceiptLong, null, tint = TextSecondary); Text("لا توجد حركات بعد") } } }
 
-@Composable
-private fun EmptyEntriesCard() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-    ) {
-        Column(
-            modifier = Modifier.padding(28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = TextSecondary)
-            Spacer(Modifier.height(10.dp))
-            Text("لا توجد حركات بعد", fontWeight = FontWeight.SemiBold)
-            Text("استخدم أزرار أعطيت أو أخذت لإضافة أول حركة", color = TextSecondary)
-        }
-    }
-}
-
-@Composable
-private fun EntryCard(
-    entry: LedgerEntry,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    val gave = entry.type == EntryType.GAVE
-    val accent = if (gave) SuccessGreen else DebtRed
-    val soft = if (gave) SuccessGreenSoft else DebtRedSoft
-    ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .background(soft, RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(if (gave) "أع" else "أخ", color = accent, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.size(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(if (gave) "أعطيت" else "أخذت", fontWeight = FontWeight.SemiBold)
-                Text(formatDateTime(entry.createdAt), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                if (entry.note.isNotBlank()) {
-                    Text(entry.note, style = MaterialTheme.typography.bodyMedium, color = DioonBlueDark)
+@Composable private fun EntryCard(entry: LedgerEntry, onEdit: () -> Unit, onDelete: () -> Unit, onPayment: () -> Unit, onSettle: () -> Unit) {
+    val gave = entry.type == EntryType.GAVE; val accent = if (gave) SuccessGreen else DebtRed
+    ElevatedCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.elevatedCardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (entry.isPayment) "دفعة سداد" else if (gave) "أعطيت" else "أخذت", fontWeight = FontWeight.Bold, color = accent)
+                    Text(formatDateTime(entry.createdAt), color = TextSecondary)
+                    if (entry.note.isNotBlank()) Text(entry.note, color = DioonBlueDark)
                 }
-            }
-            Column(horizontalAlignment = Alignment.End) {
                 Text(formatMoney(entry.amountCents), color = accent, fontWeight = FontWeight.Bold)
-                Row {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "تعديل الحركة", tint = DioonBlue)
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.DeleteOutline, contentDescription = "حذف الحركة", tint = TextSecondary)
+            }
+            if (!entry.isPayment) {
+                val statusText = when (entry.debtStatus) { DebtStatus.OPEN -> "غير مسدد"; DebtStatus.PARTIAL -> "مسدد جزئياً"; DebtStatus.PAID -> "مسدد بالكامل" }
+                Surface(color = when (entry.debtStatus) { DebtStatus.PAID -> SuccessGreenSoft; DebtStatus.PARTIAL -> DioonBlueSoft; else -> DebtRedSoft }, shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.padding(10.dp)) {
+                        Text(statusText, fontWeight = FontWeight.SemiBold)
+                        Text("الأصل ${formatMoney(entry.amountCents)} • المدفوع ${formatMoney(entry.paidCents)} • المتبقي ${formatMoney(entry.remainingCents)}", style = MaterialTheme.typography.bodySmall)
+                        entry.dueAt?.let { Text("الاستحقاق: ${formatDate(it)}", style = MaterialTheme.typography.bodySmall, color = dueColor(it)) }
                     }
                 }
+                if (entry.remainingCents > 0) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onPayment, Modifier.weight(1f)) { Icon(Icons.Outlined.Payments, null); Spacer(Modifier.size(5.dp)); Text("تسجيل دفعة") }
+                    Button(onSettle, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)) { Text("سداد كامل") }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (!entry.isPayment) IconButton(onEdit) { Icon(Icons.Outlined.Edit, "تعديل", tint = DioonBlue) }
+                IconButton(onDelete) { Icon(Icons.Outlined.DeleteOutline, "حذف", tint = TextSecondary) }
             }
         }
     }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun EditPartyDialog(
-    party: Party,
-    onDismiss: () -> Unit,
-    onSave: (String, String) -> Boolean,
-) {
-    var name by remember(party.id) { mutableStateOf(party.name) }
-    var phone by remember(party.id) { mutableStateOf(party.phone) }
-    var nameError by remember { mutableStateOf(false) }
-    val nameRequester = remember { FocusRequester() }
-    val phoneRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    fun save() {
-        nameError = name.isBlank()
-        if (!nameError && onSave(name, phone)) keyboardController?.hide()
-    }
-
-    LaunchedEffect(Unit) {
-        nameRequester.requestFocus()
-        keyboardController?.show()
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("تعديل بيانات الحساب") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; nameError = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(nameRequester),
-                    label = { Text("الاسم") },
-                    singleLine = true,
-                    isError = nameError,
-                    supportingText = if (nameError) ({ Text("الاسم مطلوب") }) else null,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    keyboardActions = KeyboardActions(onNext = { phoneRequester.requestFocus() }),
-                )
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = {
-                        phone = it.filter { character -> character.isDigit() || character == '+' || character == ' ' }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(phoneRequester),
-                    label = { Text("رقم الهاتف - اختياري") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Phone,
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { save() }),
-                )
-            }
-        },
-        confirmButton = { Button(onClick = { save() }) { Text("حفظ التعديلات") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-    )
+@Composable private fun EntryEditorDialog(initialType: EntryType, existingEntry: LedgerEntry?, onDismiss: () -> Unit, onSave: (EntryType, String, String, Long, Long?) -> Boolean) {
+    val context = LocalContext.current
+    var type by remember { mutableStateOf(existingEntry?.type ?: initialType) }; var amount by remember { mutableStateOf(existingEntry?.amountCents?.let(::centsToInput).orEmpty()) }; var note by remember { mutableStateOf(existingEntry?.note.orEmpty()) }
+    var date by remember { mutableStateOf(existingEntry?.createdAt ?: System.currentTimeMillis()) }; var dueAt by remember { mutableStateOf(existingEntry?.dueAt) }; var error by remember { mutableStateOf(false) }
+    val requester = remember { FocusRequester() }; val keyboard = LocalSoftwareKeyboardController.current
+    fun save() { error = parseMoneyToCents(amount) == null; if (!error && onSave(type, amount, note, date, dueAt)) keyboard?.hide() }
+    fun pick(current: Long, maxToday: Boolean, update: (Long) -> Unit) { keyboard?.hide(); val c = Calendar.getInstance().apply { timeInMillis = current }; DatePickerDialog(context, { _, y, m, d -> update(Calendar.getInstance().apply { set(y,m,d,9,0,0); set(Calendar.MILLISECOND,0) }.timeInMillis) }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).apply { if (maxToday) datePicker.maxDate = System.currentTimeMillis() }.show() }
+    LaunchedEffect(Unit) { requester.requestFocus(); keyboard?.show() }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (existingEntry == null) "إضافة حركة مالية" else "تعديل الحركة") }, text = {
+        Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryTypeChoice(Modifier.weight(1f), type == EntryType.GAVE, "أعطيت", SuccessGreen) { type = EntryType.GAVE }; EntryTypeChoice(Modifier.weight(1f), type == EntryType.TOOK, "أخذت", DebtRed) { type = EntryType.TOOK } }
+            OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = false }, Modifier.fillMaxWidth().focusRequester(requester), label = { Text("المبلغ") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error, supportingText = { if (error) Text("أدخل مبلغاً صحيحاً") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next))
+            OutlinedButton({ pick(date, true) { date = it } }, Modifier.fillMaxWidth()) { Icon(Icons.Outlined.CalendarMonth, null); Text(" تاريخ الحركة: ${formatDate(date)}") }
+            OutlinedButton({ pick(dueAt ?: System.currentTimeMillis(), false) { dueAt = it } }, Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Event, null); Text(if (dueAt == null) " إضافة تاريخ استحقاق" else " الاستحقاق: ${formatDate(dueAt!!)}") }
+            if (dueAt != null) TextButton({ dueAt = null }) { Text("إزالة تاريخ الاستحقاق") }
+            OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("ملاحظة اختيارية") }, minLines = 2, keyboardActions = KeyboardActions(onDone = { save() }))
+        }
+    }, confirmButton = { Button({ save() }) { Text("حفظ") } }, dismissButton = { TextButton(onDismiss) { Text("إلغاء") } })
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
-@Composable
-private fun EntryEditorDialog(
-    initialType: EntryType,
-    existingEntry: LedgerEntry?,
-    onDismiss: () -> Unit,
-    onSave: (EntryType, String, String, Long) -> Boolean,
-) {
-    val context = LocalContext.current
-    var selectedType by remember(existingEntry?.id, initialType) { mutableStateOf(existingEntry?.type ?: initialType) }
-    var amount by remember(existingEntry?.id) {
-        mutableStateOf(existingEntry?.amountCents?.let(::centsToInput).orEmpty())
-    }
-    var note by remember(existingEntry?.id) { mutableStateOf(existingEntry?.note.orEmpty()) }
-    var selectedDate by remember(existingEntry?.id) {
-        mutableStateOf(existingEntry?.createdAt ?: System.currentTimeMillis())
-    }
-    var amountError by remember { mutableStateOf(false) }
-    val amountRequester = remember { FocusRequester() }
-    val noteRequester = remember { FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    fun save() {
-        amountError = parseMoneyToCents(amount) == null
-        if (!amountError && onSave(selectedType, amount, note, selectedDate)) keyboardController?.hide()
-    }
-
-    fun showDatePicker() {
-        keyboardController?.hide()
-        val calendar = Calendar.getInstance().apply { timeInMillis = selectedDate }
-        DatePickerDialog(
-            context,
-            { _, year, month, day ->
-                selectedDate = Calendar.getInstance().apply {
-                    timeInMillis = selectedDate
-                    set(Calendar.YEAR, year)
-                    set(Calendar.MONTH, month)
-                    set(Calendar.DAY_OF_MONTH, day)
-                }.timeInMillis
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH),
-        ).apply {
-            datePicker.maxDate = System.currentTimeMillis()
-        }.show()
-    }
-
-    LaunchedEffect(Unit) {
-        amountRequester.requestFocus()
-        keyboardController?.show()
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existingEntry == null) "إضافة حركة مالية" else "تعديل الحركة المالية") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 480.dp)
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("نوع الحركة", style = MaterialTheme.typography.titleSmall, color = TextSecondary)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    EntryTypeChoice(
-                        modifier = Modifier.weight(1f),
-                        selected = selectedType == EntryType.GAVE,
-                        title = "أعطيت",
-                        selectedColor = SuccessGreen,
-                        onClick = { selectedType = EntryType.GAVE },
-                    )
-                    EntryTypeChoice(
-                        modifier = Modifier.weight(1f),
-                        selected = selectedType == EntryType.TOOK,
-                        title = "أخذت",
-                        selectedColor = DebtRed,
-                        onClick = { selectedType = EntryType.TOOK },
-                    )
-                }
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = {
-                        amount = it.filter { character ->
-                            character.isDigit() || character == '.' || character == ',' || character == '٫'
-                        }
-                        amountError = false
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(amountRequester),
-                    label = { Text("المبلغ") },
-                    placeholder = { Text("مثال: 100 ${CurrencySettings.current.symbol}") },
-                    suffix = { Text(CurrencySettings.current.symbol) },
-                    singleLine = true,
-                    isError = amountError,
-                    supportingText = {
-                        if (amountError) {
-                            Text("أدخل مبلغاً صحيحاً أكبر من صفر")
-                        } else {
-                            Text("العملة: ${CurrencySettings.current.arabicName} (${CurrencySettings.current.code})")
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Next,
-                    ),
-                    keyboardActions = KeyboardActions(onNext = { noteRequester.requestFocus() }),
-                )
-                OutlinedButton(
-                    onClick = { showDatePicker() },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Icon(Icons.Outlined.CalendarMonth, contentDescription = null)
-                    Spacer(Modifier.size(8.dp))
-                    Text("تاريخ الحركة: ${formatEntryDate(selectedDate)}")
-                }
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(noteRequester),
-                    label = { Text("ملاحظة اختيارية") },
-                    minLines = 2,
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { save() }),
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { save() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedType == EntryType.GAVE) SuccessGreen else DebtRed,
-                ),
-            ) { Text(if (existingEntry == null) "حفظ الحركة" else "حفظ التعديلات") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-    )
+@Composable private fun PaymentDialog(entry: LedgerEntry, onDismiss: () -> Unit, onSave: (String, String, Long) -> Boolean) {
+    var amount by remember { mutableStateOf("") }; var note by remember { mutableStateOf("دفعة سداد") }; var date by remember { mutableStateOf(System.currentTimeMillis()) }; var error by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current; val requester = remember { FocusRequester() }; val keyboard = LocalSoftwareKeyboardController.current
+    fun save() { val cents = parseMoneyToCents(amount); error = when { cents == null -> "أدخل مبلغاً صحيحاً"; cents > entry.remainingCents -> "الدفعة أكبر من المتبقي"; else -> null }; if (error == null && onSave(amount, note, date)) keyboard?.hide() }
+    LaunchedEffect(Unit) { requester.requestFocus(); keyboard?.show() }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("تسجيل دفعة") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("المتبقي: ${formatMoney(entry.remainingCents)}", fontWeight = FontWeight.Bold)
+        OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = null }, Modifier.fillMaxWidth().focusRequester(requester), label = { Text("قيمة الدفعة") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error != null, supportingText = { error?.let { Text(it) } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        OutlinedButton({ val c = Calendar.getInstance().apply { timeInMillis = date }; DatePickerDialog(context, { _,y,m,d -> date = Calendar.getInstance().apply { set(y,m,d) }.timeInMillis }, c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show() }, Modifier.fillMaxWidth()) { Text("تاريخ الدفعة: ${formatDate(date)}") }
+        OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("ملاحظة") })
+        TextButton({ amount = centsToInput(entry.remainingCents) }) { Text("استخدام كامل المبلغ المتبقي") }
+    } }, confirmButton = { Button({ save() }) { Text("حفظ الدفعة") } }, dismissButton = { TextButton(onDismiss) { Text("إلغاء") } })
 }
 
-@Composable
-private fun EntryTypeChoice(
-    modifier: Modifier,
-    selected: Boolean,
-    title: String,
-    selectedColor: Color,
-    onClick: () -> Unit,
-) {
-    if (selected) {
-        Button(
-            onClick = onClick,
-            modifier = modifier,
-            colors = ButtonDefaults.buttonColors(containerColor = selectedColor),
-            shape = RoundedCornerShape(14.dp),
-        ) { Text(title) }
-    } else {
-        OutlinedButton(
-            onClick = onClick,
-            modifier = modifier,
-            shape = RoundedCornerShape(14.dp),
-        ) { Text(title, color = TextSecondary) }
-    }
+@Composable private fun EntryTypeChoice(modifier: Modifier, selected: Boolean, title: String, color: Color, onClick: () -> Unit) { if (selected) Button(onClick, modifier, colors = ButtonDefaults.buttonColors(containerColor = color)) { Text(title) } else OutlinedButton(onClick, modifier) { Text(title) } }
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable private fun EditPartyDialog(party: Party, onDismiss: () -> Unit, onSave: (String,String)->Boolean) {
+    var name by remember { mutableStateOf(party.name) }; var phone by remember { mutableStateOf(party.phone) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("تعديل بيانات الحساب") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(name,{name=it},Modifier.fillMaxWidth(),label={Text("الاسم")}); OutlinedTextField(phone,{phone=it},Modifier.fillMaxWidth(),label={Text("رقم الهاتف")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Phone)) } }, confirmButton = { Button({ if(name.isNotBlank()) onSave(name,phone) }) { Text("حفظ") } }, dismissButton = { TextButton(onDismiss) { Text("إلغاء") } })
 }
 
-private fun centsToInput(cents: Long): String =
-    BigDecimal.valueOf(cents, 2).stripTrailingZeros().toPlainString()
-
-private fun formatEntryDate(timestamp: Long): String =
-    SimpleDateFormat("d MMMM yyyy", Locale("ar")).format(Date(timestamp))
+private fun centsToInput(cents: Long) = BigDecimal.valueOf(cents,2).stripTrailingZeros().toPlainString()
+private fun formatDate(timestamp: Long) = SimpleDateFormat("d MMMM yyyy", Locale("ar")).format(Date(timestamp))
+private fun dueColor(timestamp: Long): Color { val today = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0) }.timeInMillis; return if (timestamp < today) DebtRed else DioonBlueDark }
