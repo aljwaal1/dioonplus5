@@ -1,0 +1,26 @@
+name: Fix Lock Dialog Cancel
+
+on:
+  push:
+    branches: ["fix/optional-entry-lock-currency-input"]
+    paths:
+      - "tools/fix_lock_dialog_cancel.py"
+      - ".github/workflows/fix-lock-dialog-cancel.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/optional-entry-lock-currency-input
+      - run: python tools/fix_lock_dialog_cancel.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Reset pending lock enablement when PIN dialog is cancelled"
+          git push origin HEAD:fix/optional-entry-lock-currency-input
