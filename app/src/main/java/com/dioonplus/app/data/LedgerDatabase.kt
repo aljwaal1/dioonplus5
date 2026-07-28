@@ -223,7 +223,8 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
 
     fun reportRows(): List<ReportRow> {
         val sql = """
-            SELECT e.id AS entry_id, p.name AS party_name, p.type AS party_type,
+            SELECT e.id AS entry_id, p.id AS party_id, p.name AS party_name,
+                   p.phone AS party_phone, p.type AS party_type,
                    e.entry_type, e.amount_cents, e.note, e.created_at
             FROM ledger_entries e
             INNER JOIN parties p ON p.id = e.party_id
@@ -235,7 +236,9 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
                     add(
                         ReportRow(
                             entryId = cursor.getLong(cursor.getColumnIndexOrThrow("entry_id")),
+                            partyId = cursor.getLong(cursor.getColumnIndexOrThrow("party_id")),
                             partyName = cursor.getString(cursor.getColumnIndexOrThrow("party_name")),
+                            partyPhone = cursor.getString(cursor.getColumnIndexOrThrow("party_phone")),
                             partyType = PartyType.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("party_type"))),
                             entryType = EntryType.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("entry_type"))),
                             amountCents = cursor.getLong(cursor.getColumnIndexOrThrow("amount_cents")),
