@@ -1,11 +1,14 @@
 package com.dioonplus.app.ui.screens
 
+import android.app.DatePickerDialog
+import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,27 +18,41 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -48,8 +65,10 @@ import androidx.core.content.FileProvider
 import com.dioonplus.app.DioonAppState
 import com.dioonplus.app.data.DailyTotal
 import com.dioonplus.app.data.EntryType
+import com.dioonplus.app.data.PartyType
 import com.dioonplus.app.data.ReportRow
 import com.dioonplus.app.report.PdfReportExporter
+import com.dioonplus.app.report.ReportDocumentMeta
 import com.dioonplus.app.ui.theme.BorderColor
 import com.dioonplus.app.ui.theme.DebtRed
 import com.dioonplus.app.ui.theme.DebtRedSoft
@@ -63,20 +82,112 @@ import com.dioonplus.app.util.fileSafeDate
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatDay
 import com.dioonplus.app.util.formatMoney
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+enum class ReportPeriod(val label: String) {
+    ALL("الكل"), TODAY("اليوم"), WEEK("7 أيام"), MONTH("هذا الشهر"), CUSTOM("مخصص")
+}
+
+enum class ReportPartyFilter(val label: String) {
+    ALL("الكل"), CUSTOMERS("العملاء"), SUPPLIERS("الموردون")
+}
+
+enum class ReportEntryFilter(val label: String) {
+    ALL("كل الحركات"), GAVE("أعطيت"), TOOK("أخذت")
+}
+
+data class ReportAccountOption(
+    val id: Long,
+    val name: String,
+    val phone: String,
+    val type: PartyType,
+)
 
 @Composable
 fun ReportsScreen(contentPadding: PaddingValues, appState: DioonAppState) {
     val context = LocalContext.current
-    val rows = appState.reportRows
-    val totalGave = remember(rows.toList()) { rows.filter { it.entryType == EntryType.GAVE }.sumOf { it.amountCents } }
-    val totalTook = remember(rows.toList()) { rows.filter { it.entryType == EntryType.TOOK }.sumOf { it.amountCents } }
+    val allRows = appState.reportRows.toList()
+    var period by rememberSaveable { mutableStateOf(ReportPeriod.ALL) }
+    var partyFilter by rememberSaveable { mutableStateOf(ReportPartyFilter.ALL) }
+    var entryFilter by rememberSaveable { mutableStateOf(ReportEntryFilter.ALL) }
+    var selectedPartyId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showAccountDialog by remember { mutableStateOf(false) }
+    var customStart by rememberSaveable { mutableLongStateOf(startOfDay(System.currentTimeMillis())) }
+    var customEnd by rememberSaveable { mutableLongStateOf(endOfDay(System.currentTimeMillis())) }
+    var pendingPdfRows by remember { mutableStateOf<List<ReportRow>>(emptyList()) }
+    var pendingPdfMeta by remember { mutableStateOf<ReportDocumentMeta?>(null) }
+
+    val accounts = remember(allRows) {
+        allRows
+            .distinctBy { it.partyId }
+            .map { ReportAccountOption(it.partyId, it.partyName, it.partyPhone, it.partyType) }
+            .sortedBy { it.name.lowercase() }
+    }
+    val visibleAccounts = remember(accounts, partyFilter) {
+        accounts.filter {
+            when (partyFilter) {
+                ReportPartyFilter.ALL -> true
+                ReportPartyFilter.CUSTOMERS -> it.type == PartyType.CUSTOMER
+                ReportPartyFilter.SUPPLIERS -> it.type == PartyType.SUPPLIER
+            }
+        }
+    }
+    val selectedAccount = accounts.firstOrNull { it.id == selectedPartyId }
+    val bounds = remember(period, customStart, customEnd) { periodBounds(period, customStart, customEnd) }
+    val filteredRows = remember(allRows, partyFilter, entryFilter, selectedPartyId, bounds) {
+        allRows.filter { row ->
+            val typeMatches = when (partyFilter) {
+                ReportPartyFilter.ALL -> true
+                ReportPartyFilter.CUSTOMERS -> row.partyType == PartyType.CUSTOMER
+                ReportPartyFilter.SUPPLIERS -> row.partyType == PartyType.SUPPLIER
+            }
+            val entryMatches = when (entryFilter) {
+                ReportEntryFilter.ALL -> true
+                ReportEntryFilter.GAVE -> row.entryType == EntryType.GAVE
+                ReportEntryFilter.TOOK -> row.entryType == EntryType.TOOK
+            }
+            val partyMatches = selectedPartyId == null || row.partyId == selectedPartyId
+            val dateMatches = bounds.first?.let { row.createdAt >= it } != false &&
+                bounds.second?.let { row.createdAt <= it } != false
+            typeMatches && entryMatches && partyMatches && dateMatches
+        }
+    }
+    val totalGave = remember(filteredRows) {
+        filteredRows.filter { it.entryType == EntryType.GAVE }.sumOf { it.amountCents }
+    }
+    val totalTook = remember(filteredRows) {
+        filteredRows.filter { it.entryType == EntryType.TOOK }.sumOf { it.amountCents }
+    }
+    val periodLabel = remember(period, customStart, customEnd) {
+        buildPeriodLabel(period, customStart, customEnd)
+    }
+    val reportMeta = remember(selectedAccount, periodLabel, entryFilter, totalGave, totalTook) {
+        ReportDocumentMeta(
+            title = if (selectedAccount == null) "تقرير الحركة المالية" else "كشف حساب ${selectedAccount.name}",
+            subtitle = buildString {
+                append(if (selectedAccount == null) "تقرير تفصيلي حسب الفلاتر المختارة" else "كشف حساب تفصيلي لصاحب الحساب")
+                if (entryFilter != ReportEntryFilter.ALL) append(" • ${entryFilter.label}")
+            },
+            periodLabel = periodLabel,
+            gaveCents = totalGave,
+            tookCents = totalTook,
+            accountName = selectedAccount?.name,
+            accountPhone = selectedAccount?.phone,
+        )
+    }
+    val dailyTotals = remember(filteredRows) { buildDailyTotals(filteredRows) }
+
     val createPdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri ->
-        if (uri != null) {
+        val meta = pendingPdfMeta
+        if (uri != null && meta != null) {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use { stream ->
-                    PdfReportExporter.write(stream, rows.toList(), appState.summary)
+                    PdfReportExporter.write(stream, pendingPdfRows, meta)
                 } ?: error("تعذر فتح الملف")
             }.onSuccess {
                 Toast.makeText(context, "تم حفظ التقرير بنجاح", Toast.LENGTH_SHORT).show()
@@ -84,52 +195,101 @@ fun ReportsScreen(contentPadding: PaddingValues, appState: DioonAppState) {
                 Toast.makeText(context, "تعذر حفظ التقرير", Toast.LENGTH_LONG).show()
             }
         }
+        pendingPdfMeta = null
+        pendingPdfRows = emptyList()
+    }
+
+    fun savePdf() {
+        pendingPdfRows = filteredRows
+        pendingPdfMeta = reportMeta
+        val suffix = selectedAccount?.name?.take(24) ?: "report"
+        createPdfLauncher.launch("DioonPlus-$suffix-${fileSafeDate()}.pdf")
+    }
+
+    fun sharePdf(toOwner: Boolean) {
+        runCatching {
+            val file = PdfReportExporter.createShareFile(context, filteredRows, reportMeta)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            val owner = selectedAccount
+            val text = if (toOwner && owner != null) {
+                buildString {
+                    append("مرحباً ${owner.name}، مرفق كشف حسابك من تطبيق ديون بلس للفترة: $periodLabel.")
+                    append("\nإجمالي أعطيت: ${formatMoney(totalGave)}")
+                    append("\nإجمالي أخذت: ${formatMoney(totalTook)}")
+                    append("\nصافي الفترة: ${formatMoney(totalGave - totalTook, includeSign = true)}")
+                    if (owner.phone.isNotBlank()) append("\nرقم الحساب المسجل: ${owner.phone}")
+                }
+            } else {
+                "مرفق تقرير ديون بلس للفترة: $periodLabel — ${filteredRows.size} حركة."
+            }
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val title = if (toOwner && owner != null) "إرسال كشف الحساب إلى ${owner.name}" else "مشاركة تقرير ديون بلس"
+            context.startActivity(Intent.createChooser(intent, title))
+        }.onFailure {
+            Toast.makeText(context, "تعذر تجهيز التقرير للمشاركة", Toast.LENGTH_LONG).show()
+        }
     }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp),
+        modifier = Modifier.fillMaxSize().padding(contentPadding),
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             Text("التقارير", style = MaterialTheme.typography.headlineMedium, color = DioonBlueDark)
-            Text("تقارير فعلية مبنية على الحركات المحفوظة", color = TextSecondary)
+            Text("تقارير وكشوف حساب قابلة للتصفية والحفظ والإرسال", color = TextSecondary)
         }
-        item { PeriodCard(rows.toList()) }
         item {
-            ReportSummary(
-                gaveCents = totalGave,
-                tookCents = totalTook,
-                netCents = appState.summary.netCents,
-            )
-        }
-        item { ActivityChartCard(appState.dailyTotals.toList()) }
-        item {
-            ExportCard(
-                transactionCount = rows.size,
-                onExport = {
-                    createPdfLauncher.launch("DioonPlus-report-${fileSafeDate()}.pdf")
+            ReportFiltersCard(
+                period = period,
+                onPeriodChange = { period = it },
+                partyFilter = partyFilter,
+                onPartyFilterChange = {
+                    partyFilter = it
+                    if (selectedAccount != null && selectedAccount.type !in allowedTypes(it)) selectedPartyId = null
                 },
-                onShare = {
-                    runCatching {
-                        val file = PdfReportExporter.createShareFile(context, rows.toList(), appState.summary)
-                        val uri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.files",
-                            file,
-                        )
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/pdf"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "مشاركة تقرير ديون بلس"))
-                    }.onFailure {
-                        Toast.makeText(context, "تعذر تجهيز التقرير للمشاركة", Toast.LENGTH_LONG).show()
+                entryFilter = entryFilter,
+                onEntryFilterChange = { entryFilter = it },
+                selectedAccount = selectedAccount,
+                customStart = customStart,
+                customEnd = customEnd,
+                onPickStart = {
+                    showDatePicker(context, customStart) {
+                        customStart = startOfDay(it)
+                        if (customEnd < customStart) customEnd = endOfDay(it)
                     }
                 },
+                onPickEnd = {
+                    showDatePicker(context, customEnd) {
+                        customEnd = endOfDay(it)
+                        if (customStart > customEnd) customStart = startOfDay(it)
+                    }
+                },
+                onPickAccount = { showAccountDialog = true },
+                onClearAccount = { selectedPartyId = null },
+                onReset = {
+                    period = ReportPeriod.ALL
+                    partyFilter = ReportPartyFilter.ALL
+                    entryFilter = ReportEntryFilter.ALL
+                    selectedPartyId = null
+                },
+            )
+        }
+        item { PeriodCard(reportMeta.title, periodLabel, filteredRows.size) }
+        item { ReportSummary(totalGave, totalTook, totalGave - totalTook) }
+        item { ActivityChartCard(dailyTotals) }
+        item {
+            ExportCard(
+                transactionCount = filteredRows.size,
+                selectedAccount = selectedAccount,
+                onExport = ::savePdf,
+                onShare = { sharePdf(false) },
+                onSendToOwner = { sharePdf(true) },
             )
         }
         item {
@@ -138,50 +298,174 @@ fun ReportsScreen(contentPadding: PaddingValues, appState: DioonAppState) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("أحدث الحركات", style = MaterialTheme.typography.titleLarge)
-                Text("${rows.size} حركة", color = TextSecondary)
+                Text("الحركات المطابقة", style = MaterialTheme.typography.titleLarge)
+                Text("${filteredRows.size} حركة", color = TextSecondary)
             }
         }
-        if (rows.isEmpty()) {
+        if (filteredRows.isEmpty()) {
             item { EmptyReportCard() }
         } else {
-            items(rows.take(12), key = { it.entryId }) { row ->
-                ReportTransactionCard(row)
+            items(filteredRows, key = { it.entryId }) { row -> ReportTransactionCard(row) }
+        }
+    }
+
+    if (showAccountDialog) {
+        AccountPickerDialog(
+            accounts = visibleAccounts,
+            selectedId = selectedPartyId,
+            onDismiss = { showAccountDialog = false },
+            onSelect = {
+                selectedPartyId = it
+                showAccountDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ReportFiltersCard(
+    period: ReportPeriod,
+    onPeriodChange: (ReportPeriod) -> Unit,
+    partyFilter: ReportPartyFilter,
+    onPartyFilterChange: (ReportPartyFilter) -> Unit,
+    entryFilter: ReportEntryFilter,
+    onEntryFilterChange: (ReportEntryFilter) -> Unit,
+    selectedAccount: ReportAccountOption?,
+    customStart: Long,
+    customEnd: Long,
+    onPickStart: () -> Unit,
+    onPickEnd: () -> Unit,
+    onPickAccount: () -> Unit,
+    onClearAccount: () -> Unit,
+    onReset: () -> Unit,
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.FilterAlt, contentDescription = null, tint = DioonBlue)
+                Spacer(Modifier.size(8.dp))
+                Text("تصفية التقرير", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = onReset) {
+                    Icon(Icons.Outlined.RestartAlt, contentDescription = null)
+                    Text("إعادة ضبط")
+                }
+            }
+            FilterLabel("الفترة")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(ReportPeriod.entries) { option ->
+                    FilterChip(selected = period == option, onClick = { onPeriodChange(option) }, label = { Text(option.label) })
+                }
+            }
+            if (period == ReportPeriod.CUSTOM) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onPickStart, modifier = Modifier.weight(1f)) {
+                        Text("من ${formatShortDate(customStart)}")
+                    }
+                    OutlinedButton(onClick = onPickEnd, modifier = Modifier.weight(1f)) {
+                        Text("إلى ${formatShortDate(customEnd)}")
+                    }
+                }
+            }
+            FilterLabel("نوع الحساب")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(ReportPartyFilter.entries) { option ->
+                    FilterChip(selected = partyFilter == option, onClick = { onPartyFilterChange(option) }, label = { Text(option.label) })
+                }
+            }
+            FilterLabel("صاحب الحساب")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onPickAccount, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Outlined.PersonSearch, contentDescription = null)
+                    Spacer(Modifier.size(6.dp))
+                    Text(selectedAccount?.name ?: "كل أصحاب الحسابات")
+                }
+                if (selectedAccount != null) TextButton(onClick = onClearAccount) { Text("إلغاء") }
+            }
+            FilterLabel("نوع الحركة")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(ReportEntryFilter.entries) { option ->
+                    FilterChip(selected = entryFilter == option, onClick = { onEntryFilterChange(option) }, label = { Text(option.label) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PeriodCard(rows: List<ReportRow>) {
-    val period = when {
-        rows.isEmpty() -> "لا توجد بيانات حتى الآن"
-        rows.size == 1 -> formatDateTime(rows.first().createdAt)
-        else -> "من ${formatDateTime(rows.last().createdAt)} إلى ${formatDateTime(rows.first().createdAt)}"
+private fun FilterLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun AccountPickerDialog(
+    accounts: List<ReportAccountOption>,
+    selectedId: Long?,
+    onDismiss: () -> Unit,
+    onSelect: (Long?) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("اختر صاحب الحساب") },
+        text = {
+            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 430.dp)) {
+                item {
+                    AccountOptionRow("كل أصحاب الحسابات", "بدون تحديد حساب", selectedId == null) { onSelect(null) }
+                }
+                items(accounts, key = { it.id }) { account ->
+                    AccountOptionRow(
+                        account.name,
+                        buildString {
+                            append(if (account.type == PartyType.CUSTOMER) "عميل" else "مورد")
+                            if (account.phone.isNotBlank()) append(" • ${account.phone}")
+                        },
+                        selectedId == account.id,
+                    ) { onSelect(account.id) }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+    )
+}
+
+@Composable
+private fun AccountOptionRow(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        color = if (selected) DioonBlueSoft else Color.Transparent,
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold, color = if (selected) DioonBlue else DioonBlueDark)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        }
     }
+}
+
+@Composable
+private fun PeriodCard(title: String, period: String, count: Int) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
         shape = RoundedCornerShape(16.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(DioonBlueSoft, RoundedCornerShape(12.dp)),
+                modifier = Modifier.size(42.dp).background(DioonBlueSoft, RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = DioonBlue)
-            }
+            ) { Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = DioonBlue) }
             Spacer(Modifier.size(10.dp))
-            Column {
-                Text("كل الحركات", fontWeight = FontWeight.SemiBold)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
                 Text(period, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             }
+            Text("$count", color = DioonBlue, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -196,13 +480,7 @@ private fun ReportSummary(gaveCents: Long, tookCents: Long, netCents: Long) {
 }
 
 @Composable
-private fun MetricCard(
-    modifier: Modifier,
-    title: String,
-    value: String,
-    accent: Color,
-    soft: Color,
-) {
+private fun MetricCard(modifier: Modifier, title: String, value: String, accent: Color, soft: Color) {
     Surface(modifier = modifier, color = soft, shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 13.dp)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
@@ -221,13 +499,9 @@ private fun ActivityChartCard(totals: List<DailyTotal>) {
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("حركة آخر 7 أيام", style = MaterialTheme.typography.titleMedium)
+                    Text("حركة آخر 7 أيام ضمن الفلاتر", style = MaterialTheme.typography.titleMedium)
                     Text("مقارنة أعطيت بأخذت", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -239,9 +513,7 @@ private fun ActivityChartCard(totals: List<DailyTotal>) {
             RealBarChart(totals)
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                totals.forEach { total ->
-                    Text(formatDay(total.dayStartMillis), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-                }
+                totals.forEach { Text(formatDay(it.dayStartMillis), style = MaterialTheme.typography.bodyMedium, color = TextSecondary) }
             }
         }
     }
@@ -259,11 +531,7 @@ private fun LegendDot(color: Color, text: String) {
 @Composable
 private fun RealBarChart(totals: List<DailyTotal>) {
     val maxValue = totals.maxOfOrNull { maxOf(it.gaveCents, it.tookCents) }?.coerceAtLeast(1L) ?: 1L
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(150.dp),
-    ) {
+    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp)) {
         if (totals.isEmpty()) return@Canvas
         val groupWidth = size.width / totals.size
         val baseline = size.height
@@ -272,20 +540,8 @@ private fun RealBarChart(totals: List<DailyTotal>) {
             val center = groupWidth * index + groupWidth / 2
             val gaveRatio = total.gaveCents.toFloat() / maxValue.toFloat()
             val tookRatio = total.tookCents.toFloat() / maxValue.toFloat()
-            drawLine(
-                color = SuccessGreen.copy(alpha = 0.88f),
-                start = Offset(center - barWidth, baseline),
-                end = Offset(center - barWidth, baseline - size.height * gaveRatio),
-                strokeWidth = barWidth,
-                cap = StrokeCap.Round,
-            )
-            drawLine(
-                color = DebtRed.copy(alpha = 0.88f),
-                start = Offset(center + barWidth, baseline),
-                end = Offset(center + barWidth, baseline - size.height * tookRatio),
-                strokeWidth = barWidth,
-                cap = StrokeCap.Round,
-            )
+            drawLine(SuccessGreen.copy(alpha = 0.88f), Offset(center - barWidth, baseline), Offset(center - barWidth, baseline - size.height * gaveRatio), barWidth, StrokeCap.Round)
+            drawLine(DebtRed.copy(alpha = 0.88f), Offset(center + barWidth, baseline), Offset(center + barWidth, baseline - size.height * tookRatio), barWidth, StrokeCap.Round)
         }
     }
 }
@@ -293,8 +549,10 @@ private fun RealBarChart(totals: List<DailyTotal>) {
 @Composable
 private fun ExportCard(
     transactionCount: Int,
+    selectedAccount: ReportAccountOption?,
     onExport: () -> Unit,
     onShare: () -> Unit,
+    onSendToOwner: () -> Unit,
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -305,39 +563,42 @@ private fun ExportCard(
         Column(modifier = Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(DioonBlueSoft, RoundedCornerShape(13.dp)),
+                    modifier = Modifier.size(44.dp).background(DioonBlueSoft, RoundedCornerShape(13.dp)),
                     contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = DioonBlue)
-                }
+                ) { Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = DioonBlue) }
                 Spacer(Modifier.size(10.dp))
                 Column {
-                    Text("تقرير PDF احترافي", style = MaterialTheme.typography.titleMedium)
-                    Text("يشمل $transactionCount حركة والملخص المالي", color = TextSecondary)
+                    Text(if (selectedAccount == null) "تقرير PDF احترافي" else "كشف حساب ${selectedAccount.name}", style = MaterialTheme.typography.titleMedium)
+                    Text("يشمل $transactionCount حركة مطابقة للفلاتر", color = TextSecondary)
                 }
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onExport,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = DioonBlue),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
+                Button(onClick = onExport, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = DioonBlue), shape = RoundedCornerShape(14.dp)) {
                     Icon(Icons.Outlined.FileDownload, contentDescription = null)
                     Spacer(Modifier.size(7.dp))
                     Text("حفظ PDF")
                 }
-                OutlinedButton(
-                    onClick = onShare,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
+                OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
                     Icon(Icons.Outlined.IosShare, contentDescription = null)
                     Spacer(Modifier.size(7.dp))
                     Text("مشاركة")
+                }
+            }
+            if (selectedAccount != null) {
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = onSendToOwner,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(Icons.Outlined.Send, contentDescription = null)
+                    Spacer(Modifier.size(7.dp))
+                    Text("إرسال كشف الحساب لصاحب الحساب")
+                }
+                if (selectedAccount.phone.isBlank()) {
+                    Text("لا يوجد رقم هاتف محفوظ؛ اختر المستلم يدوياً من تطبيق المشاركة.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -354,14 +615,11 @@ private fun ReportTransactionCard(row: ReportRow) {
         colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(row.partyName, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (gave) "أعطيت • ${formatDateTime(row.createdAt)}" else "أخذت • ${formatDateTime(row.createdAt)}",
+                    "${if (gave) "أعطيت" else "أخذت"} • ${if (row.partyType == PartyType.CUSTOMER) "عميل" else "مورد"} • ${formatDateTime(row.createdAt)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
@@ -380,14 +638,106 @@ private fun EmptyReportCard() {
         shape = RoundedCornerShape(18.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
     ) {
-        Column(
-            modifier = Modifier.padding(30.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        Column(modifier = Modifier.padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(10.dp))
-            Text("لا توجد بيانات للتقرير", fontWeight = FontWeight.Bold)
-            Text("أضف حساباً وسجّل حركة لتظهر النتائج هنا", color = TextSecondary)
+            Text("لا توجد حركات مطابقة", fontWeight = FontWeight.Bold)
+            Text("غيّر الفترة أو صاحب الحساب أو نوع الحركة", color = TextSecondary)
         }
     }
+}
+
+private fun allowedTypes(filter: ReportPartyFilter): Set<PartyType> = when (filter) {
+    ReportPartyFilter.ALL -> PartyType.entries.toSet()
+    ReportPartyFilter.CUSTOMERS -> setOf(PartyType.CUSTOMER)
+    ReportPartyFilter.SUPPLIERS -> setOf(PartyType.SUPPLIER)
+}
+
+private fun periodBounds(period: ReportPeriod, customStart: Long, customEnd: Long): Pair<Long?, Long?> {
+    val now = System.currentTimeMillis()
+    return when (period) {
+        ReportPeriod.ALL -> null to null
+        ReportPeriod.TODAY -> startOfDay(now) to endOfDay(now)
+        ReportPeriod.WEEK -> {
+            val calendar = Calendar.getInstance().apply {
+                timeInMillis = startOfDay(now)
+                add(Calendar.DAY_OF_YEAR, -6)
+            }
+            calendar.timeInMillis to endOfDay(now)
+        }
+        ReportPeriod.MONTH -> {
+            val calendar = Calendar.getInstance().apply {
+                timeInMillis = now
+                set(Calendar.DAY_OF_MONTH, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            calendar.timeInMillis to endOfDay(now)
+        }
+        ReportPeriod.CUSTOM -> minOf(customStart, customEnd) to maxOf(customStart, customEnd)
+    }
+}
+
+private fun buildPeriodLabel(period: ReportPeriod, customStart: Long, customEnd: Long): String = when (period) {
+    ReportPeriod.ALL -> "كل الفترات"
+    ReportPeriod.TODAY -> "اليوم: ${formatShortDate(System.currentTimeMillis())}"
+    ReportPeriod.WEEK -> "آخر 7 أيام"
+    ReportPeriod.MONTH -> "الشهر الحالي"
+    ReportPeriod.CUSTOM -> "من ${formatShortDate(customStart)} إلى ${formatShortDate(customEnd)}"
+}
+
+private fun buildDailyTotals(rows: List<ReportRow>): List<DailyTotal> {
+    val calendar = Calendar.getInstance().apply {
+        timeInMillis = startOfDay(System.currentTimeMillis())
+        add(Calendar.DAY_OF_YEAR, -6)
+    }
+    val totals = LinkedHashMap<Long, LongArray>()
+    repeat(7) {
+        totals[calendar.timeInMillis] = longArrayOf(0L, 0L)
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+    }
+    rows.forEach { row ->
+        val day = startOfDay(row.createdAt)
+        val bucket = totals[day] ?: return@forEach
+        if (row.entryType == EntryType.GAVE) bucket[0] += row.amountCents else bucket[1] += row.amountCents
+    }
+    return totals.map { (day, values) -> DailyTotal(day, values[0], values[1]) }
+}
+
+private fun startOfDay(timestamp: Long): Long = Calendar.getInstance().apply {
+    timeInMillis = timestamp
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+private fun endOfDay(timestamp: Long): Long = Calendar.getInstance().apply {
+    timeInMillis = timestamp
+    set(Calendar.HOUR_OF_DAY, 23)
+    set(Calendar.MINUTE, 59)
+    set(Calendar.SECOND, 59)
+    set(Calendar.MILLISECOND, 999)
+}.timeInMillis
+
+private fun formatShortDate(timestamp: Long): String =
+    SimpleDateFormat("yyyy/MM/dd", Locale("ar")).format(Date(timestamp))
+
+private fun showDatePicker(context: Context, initial: Long, onSelected: (Long) -> Unit) {
+    val calendar = Calendar.getInstance().apply { timeInMillis = initial }
+    DatePickerDialog(
+        context,
+        { _, year, month, day ->
+            val selected = Calendar.getInstance().apply {
+                set(year, month, day, 12, 0, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            onSelected(selected.timeInMillis)
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH),
+    ).show()
 }

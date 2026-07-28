@@ -30,7 +30,9 @@ data class DashboardSummary(
 
 data class ReportRow(
     val entryId: Long,
+    val partyId: Long,
     val partyName: String,
+    val partyPhone: String,
     val partyType: PartyType,
     val entryType: EntryType,
     val amountCents: Long,
