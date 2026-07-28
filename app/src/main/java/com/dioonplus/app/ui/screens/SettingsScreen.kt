@@ -295,7 +295,10 @@ fun SettingsScreen(
         SetPinDialog(
             hasExistingPin = hasPin,
             preferences = preferences,
-            onDismiss = { showPinDialog = false },
+            onDismiss = {
+                enableLockAfterPinSave = false
+                showPinDialog = false
+            },
             onSaved = {
                 val shouldEnable = enableLockAfterPinSave || !hasPin || entryLockEnabled
                 preferences.entryLockEnabled = shouldEnable
