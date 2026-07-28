@@ -53,10 +53,12 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
     @Synchronized
     fun addParty(name: String, phone: String, type: PartyType): Long {
         val cleanName = name.trim()
+        val cleanPhone = phone.trim()
         require(cleanName.isNotEmpty()) { "اسم الحساب مطلوب" }
+        ensurePartyIsUnique(cleanName, cleanPhone, type)
         val values = ContentValues().apply {
             put("name", cleanName)
-            put("phone", phone.trim())
+            put("phone", cleanPhone)
             put("type", type.name)
             put("created_at", System.currentTimeMillis())
         }
@@ -65,18 +67,23 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
 
     @Synchronized
     fun updateParty(id: Long, name: String, phone: String) {
+        val existing = getParty(id) ?: error("الحساب غير موجود")
         val cleanName = name.trim()
+        val cleanPhone = phone.trim()
         require(cleanName.isNotEmpty()) { "اسم الحساب مطلوب" }
+        ensurePartyIsUnique(cleanName, cleanPhone, existing.type, excludeId = id)
         val values = ContentValues().apply {
             put("name", cleanName)
-            put("phone", phone.trim())
+            put("phone", cleanPhone)
         }
-        writableDatabase.update("parties", values, "id = ?", arrayOf(id.toString()))
+        val changed = writableDatabase.update("parties", values, "id = ?", arrayOf(id.toString()))
+        check(changed == 1) { "تعذر تعديل الحساب" }
     }
 
     @Synchronized
     fun deleteParty(id: Long) {
-        writableDatabase.delete("parties", "id = ?", arrayOf(id.toString()))
+        val changed = writableDatabase.delete("parties", "id = ?", arrayOf(id.toString()))
+        check(changed == 1) { "الحساب غير موجود" }
     }
 
     @Synchronized
@@ -88,6 +95,8 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
         createdAt: Long = System.currentTimeMillis(),
     ): Long {
         require(amountCents > 0) { "المبلغ يجب أن يكون أكبر من صفر" }
+        require(createdAt > 0L) { "تاريخ الحركة غير صحيح" }
+        require(getParty(partyId) != null) { "الحساب غير موجود" }
         val values = ContentValues().apply {
             put("party_id", partyId)
             put("entry_type", type.name)
@@ -99,8 +108,34 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
+    fun updateEntry(
+        entryId: Long,
+        type: EntryType,
+        amountCents: Long,
+        note: String,
+        createdAt: Long,
+    ) {
+        require(amountCents > 0) { "المبلغ يجب أن يكون أكبر من صفر" }
+        require(createdAt > 0L) { "تاريخ الحركة غير صحيح" }
+        val values = ContentValues().apply {
+            put("entry_type", type.name)
+            put("amount_cents", amountCents)
+            put("note", note.trim())
+            put("created_at", createdAt)
+        }
+        val changed = writableDatabase.update(
+            "ledger_entries",
+            values,
+            "id = ?",
+            arrayOf(entryId.toString()),
+        )
+        check(changed == 1) { "الحركة غير موجودة" }
+    }
+
+    @Synchronized
     fun deleteEntry(entryId: Long) {
-        writableDatabase.delete("ledger_entries", "id = ?", arrayOf(entryId.toString()))
+        val changed = writableDatabase.delete("ledger_entries", "id = ?", arrayOf(entryId.toString()))
+        check(changed == 1) { "الحركة غير موجودة" }
     }
 
     fun listParties(type: PartyType, search: String = ""): List<Party> {
@@ -256,6 +291,30 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
         return totals.map { (day, values) ->
             DailyTotal(dayStartMillis = day, gaveCents = values[0], tookCents = values[1])
         }
+    }
+
+    private fun ensurePartyIsUnique(
+        name: String,
+        phone: String,
+        type: PartyType,
+        excludeId: Long? = null,
+    ) {
+        val conditions = mutableListOf("type = ?")
+        val args = mutableListOf(type.name)
+        val duplicateParts = mutableListOf("name = ? COLLATE NOCASE")
+        args += name
+        if (phone.isNotBlank()) {
+            duplicateParts += "phone = ?"
+            args += phone
+        }
+        conditions += "(${duplicateParts.joinToString(" OR ")})"
+        if (excludeId != null) {
+            conditions += "id != ?"
+            args += excludeId.toString()
+        }
+        val sql = "SELECT 1 FROM parties WHERE ${conditions.joinToString(" AND ")} LIMIT 1"
+        val duplicateExists = readableDatabase.rawQuery(sql, args.toTypedArray()).use { it.moveToFirst() }
+        require(!duplicateExists) { "يوجد حساب آخر بنفس الاسم أو رقم الهاتف" }
     }
 
     private fun Cursor.toParty(): Party = Party(
