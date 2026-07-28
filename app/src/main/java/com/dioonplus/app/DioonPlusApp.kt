@@ -56,10 +56,13 @@ fun DioonPlusApp() {
         AppPreferences(context.applicationContext)
     }
     CurrencySettings.current = preferences.currency
-    var unlocked by rememberSaveable { mutableStateOf(!preferences.hasPin()) }
+    var entryLockEnabled by rememberSaveable {
+        mutableStateOf(preferences.entryLockEnabled && preferences.hasPin())
+    }
+    var unlocked by rememberSaveable { mutableStateOf(!entryLockEnabled) }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        if (!unlocked && preferences.hasPin()) {
+        if (!unlocked && entryLockEnabled && preferences.hasPin()) {
             PinLockScreen(
                 onUnlock = { pin ->
                     preferences.verifyPin(pin).also { valid ->
@@ -121,8 +124,12 @@ fun DioonPlusApp() {
                             contentPadding = innerPadding,
                             appState = appState,
                             preferences = preferences,
+                            onEntryLockChanged = { enabled ->
+                                entryLockEnabled = enabled && preferences.hasPin()
+                                if (!entryLockEnabled) unlocked = true
+                            },
                             onLockNow = {
-                                if (preferences.hasPin()) unlocked = false
+                                if (entryLockEnabled && preferences.hasPin()) unlocked = false
                             },
                         )
                     }

@@ -74,6 +74,7 @@ fun SettingsScreen(
     contentPadding: PaddingValues,
     appState: DioonAppState,
     preferences: AppPreferences,
+    onEntryLockChanged: (Boolean) -> Unit,
     onLockNow: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -83,6 +84,10 @@ fun SettingsScreen(
     var showRemovePinDialog by remember { mutableStateOf(false) }
     var pendingBackupJson by remember { mutableStateOf<String?>(null) }
     var pinRevision by remember { mutableStateOf(0) }
+    var entryLockEnabled by remember {
+        mutableStateOf(preferences.entryLockEnabled && preferences.hasPin())
+    }
+    var enableLockAfterPinSave by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(preferences.soundEnabled) }
     var vibrationEnabled by remember { mutableStateOf(preferences.vibrationEnabled) }
     val hasPin = remember(pinRevision) { preferences.hasPin() }
@@ -135,10 +140,42 @@ fun SettingsScreen(
             )
         }
         item {
+            ToggleCard(
+                title = "طلب رمز الدخول عند فتح التطبيق",
+                subtitle = if (entryLockEnabled) {
+                    "مفعّل — سيُطلب رمز PIN عند كل تشغيل جديد"
+                } else {
+                    "متوقف — يفتح التطبيق مباشرة دون كلمة مرور"
+                },
+                checked = entryLockEnabled,
+                onCheckedChange = { enabled ->
+                    if (enabled) {
+                        if (hasPin) {
+                            entryLockEnabled = true
+                            preferences.entryLockEnabled = true
+                            onEntryLockChanged(true)
+                        } else {
+                            enableLockAfterPinSave = true
+                            showPinDialog = true
+                        }
+                    } else {
+                        enableLockAfterPinSave = false
+                        entryLockEnabled = false
+                        preferences.entryLockEnabled = false
+                        onEntryLockChanged(false)
+                    }
+                },
+            )
+        }
+        item {
             SettingsRow(
                 icon = if (hasPin) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
-                title = "رمز PIN",
-                subtitle = if (hasPin) "مفعّل لحماية التطبيق" else "غير مفعّل — أضف رمزاً من 4 إلى 6 أرقام",
+                title = "رمز الدخول (PIN)",
+                subtitle = when {
+                    !hasPin -> "غير مُنشأ — أنشئ رمزاً من 4 إلى 6 أرقام"
+                    entryLockEnabled -> "محفوظ ومفعّل عند فتح التطبيق"
+                    else -> "محفوظ، لكن طلبه عند الدخول متوقف"
+                },
                 onClick = { showPinDialog = true },
             )
         }
@@ -147,6 +184,7 @@ fun SettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(
                         onClick = onLockNow,
+                        enabled = entryLockEnabled,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                     ) { Text("قفل الآن") }
@@ -154,7 +192,7 @@ fun SettingsScreen(
                         onClick = { showRemovePinDialog = true },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
-                    ) { Text("إزالة PIN", color = DebtRed) }
+                    ) { Text("إزالة الرمز", color = DebtRed) }
                 }
             }
         }
@@ -259,9 +297,18 @@ fun SettingsScreen(
             preferences = preferences,
             onDismiss = { showPinDialog = false },
             onSaved = {
+                val shouldEnable = enableLockAfterPinSave || !hasPin || entryLockEnabled
+                preferences.entryLockEnabled = shouldEnable
+                entryLockEnabled = shouldEnable
+                onEntryLockChanged(shouldEnable)
+                enableLockAfterPinSave = false
                 pinRevision++
                 showPinDialog = false
-                Toast.makeText(context, "تم حفظ رمز PIN", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (shouldEnable) "تم حفظ رمز الدخول وتفعيل الحماية" else "تم تحديث رمز الدخول",
+                    Toast.LENGTH_SHORT,
+                ).show()
             },
         )
     }
@@ -271,9 +318,12 @@ fun SettingsScreen(
             preferences = preferences,
             onDismiss = { showRemovePinDialog = false },
             onRemoved = {
+                entryLockEnabled = false
+                enableLockAfterPinSave = false
+                onEntryLockChanged(false)
                 pinRevision++
                 showRemovePinDialog = false
-                Toast.makeText(context, "تمت إزالة رمز PIN", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "تمت إزالة رمز الدخول وإيقاف الحماية", Toast.LENGTH_SHORT).show()
             },
         )
     }

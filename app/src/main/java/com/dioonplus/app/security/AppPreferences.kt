@@ -35,7 +35,11 @@ class AppPreferences(context: Context) {
     }
 
     fun clearPin() {
-        preferences.edit().remove(KEY_PIN_SALT).remove(KEY_PIN_HASH).apply()
+        preferences.edit()
+            .remove(KEY_PIN_SALT)
+            .remove(KEY_PIN_HASH)
+            .putBoolean(KEY_ENTRY_LOCK, false)
+            .apply()
     }
 
     var soundEnabled: Boolean
@@ -45,6 +49,10 @@ class AppPreferences(context: Context) {
     var vibrationEnabled: Boolean
         get() = preferences.getBoolean(KEY_VIBRATION, true)
         set(value) = preferences.edit().putBoolean(KEY_VIBRATION, value).apply()
+
+    var entryLockEnabled: Boolean
+        get() = preferences.getBoolean(KEY_ENTRY_LOCK, hasPin())
+        set(value) = preferences.edit().putBoolean(KEY_ENTRY_LOCK, value && hasPin()).apply()
 
     var recoveryEmail: String
         get() = preferences.getString(KEY_RECOVERY_EMAIL, "").orEmpty()
@@ -66,6 +74,7 @@ class AppPreferences(context: Context) {
         private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_SOUND = "sound_enabled"
         private const val KEY_VIBRATION = "vibration_enabled"
+        private const val KEY_ENTRY_LOCK = "entry_lock_enabled"
         private const val KEY_RECOVERY_EMAIL = "recovery_email"
         private const val KEY_CURRENCY = "currency_code"
     }

@@ -81,6 +81,7 @@ import com.dioonplus.app.ui.theme.DioonBlueDark
 import com.dioonplus.app.ui.theme.SuccessGreen
 import com.dioonplus.app.ui.theme.SuccessGreenSoft
 import com.dioonplus.app.ui.theme.TextSecondary
+import com.dioonplus.app.util.CurrencySettings
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatMoney
 import com.dioonplus.app.util.parseMoneyToCents
@@ -592,9 +593,17 @@ private fun EntryEditorDialog(
                         .fillMaxWidth()
                         .focusRequester(amountRequester),
                     label = { Text("المبلغ") },
+                    placeholder = { Text("مثال: 100 ${CurrencySettings.current.symbol}") },
+                    suffix = { Text(CurrencySettings.current.symbol) },
                     singleLine = true,
                     isError = amountError,
-                    supportingText = if (amountError) ({ Text("أدخل مبلغاً صحيحاً أكبر من صفر") }) else null,
+                    supportingText = {
+                        if (amountError) {
+                            Text("أدخل مبلغاً صحيحاً أكبر من صفر")
+                        } else {
+                            Text("العملة: ${CurrencySettings.current.arabicName} (${CurrencySettings.current.code})")
+                        }
+                    },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
                         imeAction = ImeAction.Next,
