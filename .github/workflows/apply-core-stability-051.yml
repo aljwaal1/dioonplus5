@@ -23,7 +23,11 @@ jobs:
         with:
           ref: fix/core-stability-0.5.1
       - run: python tools/apply_core_stability_051.py
-      - run: |
+      - name: Commit source changes only
+        run: |
+          git checkout -- .github/workflows/publish-release.yml || true
+          git checkout -- .github/workflows/apply-core-stability-051.yml || true
+          git checkout -- tools/apply_core_stability_051.py || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
