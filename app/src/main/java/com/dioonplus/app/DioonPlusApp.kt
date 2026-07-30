@@ -84,6 +84,7 @@ fun DioonPlusApp() {
                 PartyDetailsScreen(
                     appState = appState,
                     party = selectedParty,
+                    preferences = preferences,
                     onBack = appState::closeParty,
                 )
             } else {
@@ -126,7 +127,7 @@ fun DioonPlusApp() {
                     },
                 ) { innerPadding ->
                     when (selectedIndex) {
-                        0 -> HomeScreen(contentPadding = innerPadding, appState = appState)
+                        0 -> HomeScreen(contentPadding = innerPadding, appState = appState, preferences = preferences)
                         1 -> ReportsScreen(contentPadding = innerPadding, appState = appState)
                         else -> SettingsScreen(
                             contentPadding = innerPadding,

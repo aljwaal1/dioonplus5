@@ -13,29 +13,56 @@ import androidx.core.content.ContextCompat
 import com.dioonplus.app.MainActivity
 import com.dioonplus.app.data.LedgerDatabase
 import com.dioonplus.app.util.formatMoney
+import java.util.Calendar
 
 class DueReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val entryId = intent.getLongExtra(DueReminderScheduler.EXTRA_ENTRY_ID, -1L)
-        if (entryId <= 0) return
+        if (entryId <= 0 || wasNotifiedToday(context, entryId)) return
         val item = LedgerDatabase(context).getDueItem(entryId) ?: return
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "تذكيرات الديون", NotificationManager.IMPORTANCE_DEFAULT))
-        if (android.os.Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "تذكيرات الديون", NotificationManager.IMPORTANCE_DEFAULT),
+        )
+        if (
+            android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
         val openIntent = PendingIntent.getActivity(
             context,
             entryId.hashCode(),
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        manager.notify(entryId.hashCode(), NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("استحقاق دين: ${item.partyName}")
-            .setContentText("المتبقي ${formatMoney(item.remainingCents)} مستحق الآن")
-            .setAutoCancel(true)
-            .setContentIntent(openIntent)
-            .build())
+        manager.notify(
+            entryId.hashCode(),
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("استحقاق دين: ${item.partyName}")
+                .setContentText("المتبقي ${formatMoney(item.remainingCents)} مستحق الآن")
+                .setAutoCancel(true)
+                .setContentIntent(openIntent)
+                .build(),
+        )
+        context.getSharedPreferences(DueReminderScheduler.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(notifiedKey(entryId), todayKey())
+            .remove(DueReminderScheduler.scheduledKey(entryId))
+            .apply()
     }
 
-    companion object { private const val CHANNEL_ID = "due_debt_reminders" }
+    companion object {
+        private const val CHANNEL_ID = "due_debt_reminders"
+        private fun notifiedKey(entryId: Long) = "notified_$entryId"
+
+        fun wasNotifiedToday(context: Context, entryId: Long): Boolean =
+            context.getSharedPreferences(DueReminderScheduler.PREFS_NAME, Context.MODE_PRIVATE)
+                .getInt(notifiedKey(entryId), -1) == todayKey()
+
+        private fun todayKey(): Int = Calendar.getInstance().let { calendar ->
+            calendar.get(Calendar.YEAR) * 1000 + calendar.get(Calendar.DAY_OF_YEAR)
+        }
+    }
 }

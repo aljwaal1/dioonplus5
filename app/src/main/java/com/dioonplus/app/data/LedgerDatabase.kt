@@ -53,8 +53,48 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE ledger_entries ADD COLUMN due_at INTEGER")
             db.execSQL("ALTER TABLE ledger_entries ADD COLUMN parent_entry_id INTEGER")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_entries_due ON ledger_entries(due_at)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_entries_parent ON ledger_entries(parent_entry_id)")
+        }
+        if (oldVersion < 3) {
+            val overflow = db.rawQuery(
+                "SELECT 1 FROM ledger_entries WHERE amount_cents > ? LIMIT 1",
+                arrayOf((Long.MAX_VALUE / 10L).toString()),
+            ).use { it.moveToFirst() }
+            check(!overflow) { "تعذر ترقية مبالغ قاعدة البيانات بأمان" }
+
+            db.execSQL("DROP INDEX IF EXISTS idx_entries_party_date")
+            db.execSQL("DROP INDEX IF EXISTS idx_entries_date")
+            db.execSQL("DROP INDEX IF EXISTS idx_entries_due")
+            db.execSQL("DROP INDEX IF EXISTS idx_entries_parent")
+            db.execSQL("ALTER TABLE ledger_entries RENAME TO ledger_entries_old")
+            db.execSQL("""
+                CREATE TABLE ledger_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    party_id INTEGER NOT NULL,
+                    entry_type TEXT NOT NULL CHECK(entry_type IN ('GAVE','TOOK')),
+                    amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    due_at INTEGER,
+                    parent_entry_id INTEGER,
+                    FOREIGN KEY(party_id) REFERENCES parties(id) ON DELETE CASCADE,
+                    FOREIGN KEY(parent_entry_id) REFERENCES ledger_entries(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED
+                )
+            """.trimIndent())
+            db.execSQL("""
+                INSERT INTO ledger_entries(
+                    id, party_id, entry_type, amount_cents, note, created_at, due_at, parent_entry_id
+                )
+                SELECT id, party_id, entry_type, amount_cents * 10, note, created_at, due_at, parent_entry_id
+                FROM ledger_entries_old
+                ORDER BY CASE WHEN parent_entry_id IS NULL THEN 0 ELSE 1 END, id
+            """.trimIndent())
+            db.execSQL("DROP TABLE ledger_entries_old")
+            db.execSQL("CREATE INDEX idx_entries_party_date ON ledger_entries(party_id, created_at DESC)")
+            db.execSQL("CREATE INDEX idx_entries_date ON ledger_entries(created_at DESC)")
+            db.execSQL("CREATE INDEX idx_entries_due ON ledger_entries(due_at)")
+            db.execSQL("CREATE INDEX idx_entries_parent ON ledger_entries(parent_entry_id)")
+            val foreignKeyError = db.rawQuery("PRAGMA foreign_key_check", null).use { it.moveToFirst() }
+            check(!foreignKeyError) { "تعذر التحقق من سلامة علاقات الدفعات" }
         }
     }
 
@@ -127,6 +167,9 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
         require(amountCents > 0) { "المبلغ يجب أن يكون أكبر من صفر" }
         val existing = getEntry(entryId) ?: error("الحركة غير موجودة")
         require(!existing.isPayment) { "لا يمكن تعديل دفعة السداد بهذه الطريقة" }
+        require(existing.paidCents == 0L || type == existing.type) {
+            "لا يمكن تغيير نوع الدين بعد تسجيل دفعة"
+        }
         require(amountCents >= existing.paidCents) { "المبلغ الجديد أقل من الدفعات المسجلة" }
         val changed = writableDatabase.update("ledger_entries", ContentValues().apply {
             put("entry_type", type.name)
@@ -348,6 +391,6 @@ class LedgerDatabase(context: Context) : SQLiteOpenHelper(
 
     companion object {
         private const val DATABASE_NAME = "dioon_plus.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
     }
 }
