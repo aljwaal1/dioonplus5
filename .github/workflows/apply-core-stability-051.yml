@@ -6,6 +6,11 @@ on:
     paths:
       - "tools/apply_core_stability_051.py"
       - ".github/workflows/apply-core-stability-051.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "tools/apply_core_stability_051.py"
+      - ".github/workflows/apply-core-stability-051.yml"
 
 permissions:
   contents: write
