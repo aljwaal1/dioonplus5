@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.DioonAppState
 import com.dioonplus.app.data.*
+import com.dioonplus.app.security.AppPreferences
 import com.dioonplus.app.ui.theme.*
 import com.dioonplus.app.util.CurrencySettings
 import com.dioonplus.app.util.formatDateTime
@@ -43,7 +44,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun PartyDetailsScreen(appState: DioonAppState, party: Party, onBack: () -> Unit) {
+fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPreferences, onBack: () -> Unit) {
     var addEntryType by remember { mutableStateOf<EntryType?>(null) }
     var editingEntry by remember { mutableStateOf<LedgerEntry?>(null) }
     var paymentEntry by remember { mutableStateOf<LedgerEntry?>(null) }
@@ -93,7 +94,7 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, onBack: () -> Unit
 
     addEntryType?.let { type -> EntryEditorDialog(type, null, { addEntryType = null }) { selectedType, amount, note, createdAt, dueAt ->
         val cents = parseMoneyToCents(amount) ?: return@EntryEditorDialog false
-        appState.addEntry(selectedType, cents, note, createdAt, dueAt).also { if (it) { tone.startTone(ToneGenerator.TONE_PROP_ACK, 120); haptic.performHapticFeedback(HapticFeedbackType.LongPress); addEntryType = null } }
+        appState.addEntry(selectedType, cents, note, createdAt, dueAt).also { if (it) { if (preferences.soundEnabled) tone.startTone(ToneGenerator.TONE_PROP_ACK, 120); if (preferences.vibrationEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress); addEntryType = null } }
     } }
 
     editingEntry?.let { entry -> EntryEditorDialog(entry.type, entry, { editingEntry = null }) { selectedType, amount, note, createdAt, dueAt ->
@@ -173,7 +174,11 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, onBack: () -> Unit
     LaunchedEffect(Unit) { requester.requestFocus(); keyboard?.show() }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(if (existingEntry == null) "إضافة حركة مالية" else "تعديل الحركة") }, text = {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryTypeChoice(Modifier.weight(1f), type == EntryType.GAVE, "أعطيت", SuccessGreen) { type = EntryType.GAVE }; EntryTypeChoice(Modifier.weight(1f), type == EntryType.TOOK, "أخذت", DebtRed) { type = EntryType.TOOK } }
+            if (existingEntry?.paidCents?.let { it > 0L } == true) {
+                Text(if (type == EntryType.GAVE) "نوع الحركة: أعطيت" else "نوع الحركة: أخذت", color = TextSecondary)
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryTypeChoice(Modifier.weight(1f), type == EntryType.GAVE, "أعطيت", SuccessGreen) { type = EntryType.GAVE }; EntryTypeChoice(Modifier.weight(1f), type == EntryType.TOOK, "أخذت", DebtRed) { type = EntryType.TOOK } }
+            }
             OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = false }, Modifier.fillMaxWidth().focusRequester(requester), label = { Text("المبلغ") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error, supportingText = { if (error) Text("أدخل مبلغاً صحيحاً") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next))
             OutlinedButton({ pick(date, true) { date = it } }, Modifier.fillMaxWidth()) { Icon(Icons.Outlined.CalendarMonth, null); Text(" تاريخ الحركة: ${formatDate(date)}") }
             OutlinedButton({ pick(dueAt ?: System.currentTimeMillis(), false) { dueAt = it } }, Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Event, null); Text(if (dueAt == null) " إضافة تاريخ استحقاق" else " الاستحقاق: ${formatDate(dueAt!!)}") }
@@ -206,6 +211,6 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, onBack: () -> Unit
     AlertDialog(onDismissRequest = onDismiss, title = { Text("تعديل بيانات الحساب") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedTextField(name,{name=it},Modifier.fillMaxWidth(),label={Text("الاسم")}); OutlinedTextField(phone,{phone=it},Modifier.fillMaxWidth(),label={Text("رقم الهاتف")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Phone)) } }, confirmButton = { Button({ if(name.isNotBlank()) onSave(name,phone) }) { Text("حفظ") } }, dismissButton = { TextButton(onDismiss) { Text("إلغاء") } })
 }
 
-private fun centsToInput(cents: Long) = BigDecimal.valueOf(cents,2).stripTrailingZeros().toPlainString()
+private fun centsToInput(cents: Long) = BigDecimal.valueOf(cents,3).stripTrailingZeros().toPlainString()
 private fun formatDate(timestamp: Long) = SimpleDateFormat("d MMMM yyyy", Locale("ar")).format(Date(timestamp))
 private fun dueColor(timestamp: Long): Color { val today = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0) }.timeInMillis; return if (timestamp < today) DebtRed else DioonBlueDark }

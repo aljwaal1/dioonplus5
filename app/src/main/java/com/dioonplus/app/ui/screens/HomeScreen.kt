@@ -71,6 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.DioonAppState
 import com.dioonplus.app.data.DueItem
+import com.dioonplus.app.security.AppPreferences
 import com.dioonplus.app.data.Party
 import com.dioonplus.app.data.PartyType
 import com.dioonplus.app.ui.theme.BorderColor
@@ -89,7 +90,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
+fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState, preferences: AppPreferences) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showDueDialog by remember { mutableStateOf(false) }
     var balancesVisible by remember { mutableStateOf(true) }
@@ -206,7 +207,7 @@ fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState) {
             onSave = { name, phone ->
                 val saved = appState.addParty(name, phone, appState.selectedPartyType)
                 if (saved) {
-                    tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
+                    if (preferences.soundEnabled) tone.startTone(ToneGenerator.TONE_PROP_ACK, 120)
                     showAddDialog = false
                 }
                 saved
