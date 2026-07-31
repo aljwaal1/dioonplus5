@@ -501,7 +501,7 @@ private fun AddPartyDialog(
                     label = { Text("الاسم") },
                     singleLine = true,
                     isError = nameError,
-                    supportingText = if (nameError) ({ Text("الاسم مطلوب") }) else null,
+                    supportingText = { Text(if (nameError) "الاسم مطلوب" else " ") },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(
                         onNext = { phoneFocusRequester.requestFocus() },
