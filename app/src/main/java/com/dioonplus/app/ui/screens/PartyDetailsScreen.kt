@@ -171,7 +171,6 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
     val requester = remember { FocusRequester() }; val keyboard = LocalSoftwareKeyboardController.current
     fun save() { error = parseMoneyToCents(amount) == null; if (!error && onSave(type, amount, note, date, dueAt)) keyboard?.hide() }
     fun pick(current: Long, maxToday: Boolean, update: (Long) -> Unit) { keyboard?.hide(); val c = Calendar.getInstance().apply { timeInMillis = current }; DatePickerDialog(context, { _, y, m, d -> update(Calendar.getInstance().apply { set(y,m,d,9,0,0); set(Calendar.MILLISECOND,0) }.timeInMillis) }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).apply { if (maxToday) datePicker.maxDate = System.currentTimeMillis() }.show() }
-    LaunchedEffect(Unit) { requester.requestFocus(); keyboard?.show() }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(if (existingEntry == null) "إضافة حركة مالية" else "تعديل الحركة") }, text = {
         Column(Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (existingEntry?.paidCents?.let { it > 0L } == true) {
@@ -179,7 +178,7 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { EntryTypeChoice(Modifier.weight(1f), type == EntryType.GAVE, "أعطيت", SuccessGreen) { type = EntryType.GAVE }; EntryTypeChoice(Modifier.weight(1f), type == EntryType.TOOK, "أخذت", DebtRed) { type = EntryType.TOOK } }
             }
-            OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = false }, Modifier.fillMaxWidth().focusRequester(requester), label = { Text("المبلغ") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error, supportingText = { if (error) Text("أدخل مبلغاً صحيحاً") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next))
+            OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = false }, Modifier.fillMaxWidth(), label = { Text("المبلغ") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error, supportingText = { Text(if (error) "أدخل مبلغاً صحيحاً" else " ") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next))
             OutlinedButton({ pick(date, true) { date = it } }, Modifier.fillMaxWidth()) { Icon(Icons.Outlined.CalendarMonth, null); Text(" تاريخ الحركة: ${formatDate(date)}") }
             OutlinedButton({ pick(dueAt ?: System.currentTimeMillis(), false) { dueAt = it } }, Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Event, null); Text(if (dueAt == null) " إضافة تاريخ استحقاق" else " الاستحقاق: ${formatDate(dueAt!!)}") }
             if (dueAt != null) TextButton({ dueAt = null }) { Text("إزالة تاريخ الاستحقاق") }
@@ -193,10 +192,9 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
     var amount by remember { mutableStateOf("") }; var note by remember { mutableStateOf("دفعة سداد") }; var date by remember { mutableStateOf(System.currentTimeMillis()) }; var error by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current; val requester = remember { FocusRequester() }; val keyboard = LocalSoftwareKeyboardController.current
     fun save() { val cents = parseMoneyToCents(amount); error = when { cents == null -> "أدخل مبلغاً صحيحاً"; cents > entry.remainingCents -> "الدفعة أكبر من المتبقي"; else -> null }; if (error == null && onSave(amount, note, date)) keyboard?.hide() }
-    LaunchedEffect(Unit) { requester.requestFocus(); keyboard?.show() }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("تسجيل دفعة") }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("المتبقي: ${formatMoney(entry.remainingCents)}", fontWeight = FontWeight.Bold)
-        OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = null }, Modifier.fillMaxWidth().focusRequester(requester), label = { Text("قيمة الدفعة") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error != null, supportingText = { error?.let { Text(it) } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        OutlinedTextField(amount, { amount = it.filter { ch -> ch.isDigit() || ch in listOf('.',',','٫') }; error = null }, Modifier.fillMaxWidth(), label = { Text("قيمة الدفعة") }, suffix = { Text(CurrencySettings.current.symbol) }, isError = error != null, supportingText = { error?.let { Text(it) } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
         OutlinedButton({ val c = Calendar.getInstance().apply { timeInMillis = date }; DatePickerDialog(context, { _,y,m,d -> date = Calendar.getInstance().apply { set(y,m,d) }.timeInMillis }, c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH)).show() }, Modifier.fillMaxWidth()) { Text("تاريخ الدفعة: ${formatDate(date)}") }
         OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("ملاحظة") })
         TextButton({ amount = centsToInput(entry.remainingCents) }) { Text("استخدام كامل المبلغ المتبقي") }

@@ -529,7 +529,7 @@ private fun SetPinDialog(
                     onDone = ::save,
                     onValueChange = { confirmation = it; error = null },
                 )
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Text(error.orEmpty().ifBlank { " " }, color = MaterialTheme.colorScheme.error, modifier = Modifier.height(22.dp))
             }
         },
         confirmButton = { Button(onClick = ::save) { Text("حفظ") } },
@@ -585,7 +585,7 @@ private fun RemovePinDialog(
                     onDone = ::remove,
                     onValueChange = { currentPin = it; error = false },
                 )
-                if (error) Text("رمز PIN غير صحيح", color = MaterialTheme.colorScheme.error)
+                Text(if (error) "رمز PIN غير صحيح" else " ", color = MaterialTheme.colorScheme.error, modifier = Modifier.height(22.dp))
             }
         },
         confirmButton = { Button(onClick = ::remove) { Text("إزالة") } },

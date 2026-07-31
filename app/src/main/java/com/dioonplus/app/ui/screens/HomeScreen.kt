@@ -38,7 +38,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -178,18 +178,22 @@ fun HomeScreen(contentPadding: PaddingValues, appState: DioonAppState, preferenc
             }
         }
 
-        ExtendedFloatingActionButton(
+        FloatingActionButton(
             onClick = { showAddDialog = true },
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(18.dp),
+                .padding(start = 18.dp, bottom = 14.dp)
+                .size(52.dp),
             containerColor = DioonBlue,
             contentColor = Color.White,
-            icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-            text = {
-                Text(if (appState.selectedPartyType == PartyType.CUSTOMER) "إضافة عميل" else "إضافة مورد")
-            },
-        )
+            shape = CircleShape,
+        ) {
+            Icon(
+                Icons.Outlined.Add,
+                contentDescription = if (appState.selectedPartyType == PartyType.CUSTOMER) "إضافة عميل" else "إضافة مورد",
+                modifier = Modifier.size(24.dp),
+            )
+        }
     }
 
     if (showDueDialog) {
@@ -501,7 +505,7 @@ private fun AddPartyDialog(
                     label = { Text("الاسم") },
                     singleLine = true,
                     isError = nameError,
-                    supportingText = if (nameError) ({ Text("الاسم مطلوب") }) else null,
+                    supportingText = { Text(if (nameError) "الاسم مطلوب" else " ") },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(
                         onNext = { phoneFocusRequester.requestFocus() },
