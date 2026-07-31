@@ -49,7 +49,7 @@ import com.dioonplus.app.ui.theme.DioonBlueSoft
 import com.dioonplus.app.ui.theme.ElevatedSurface
 import com.dioonplus.app.ui.theme.TextSecondary
 
-private const val DEVELOPER_EMAIL = "yaya15112016@gmail.com"
+private const val DEVELOPER_EMAIL = "fastunlocked2017@gmail.com"
 
 @Composable
 fun PinLockScreen(onUnlock: (String) -> Boolean) {
