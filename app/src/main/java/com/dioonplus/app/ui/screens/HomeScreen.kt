@@ -85,6 +85,7 @@ import com.dioonplus.app.ui.theme.SuccessGreenSoft
 import com.dioonplus.app.ui.theme.TextSecondary
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatMoney
+import com.dioonplus.app.util.toEnglishDigits
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -590,7 +591,7 @@ private fun DueItemsDialog(items: List<DueItem>, onDismiss: () -> Unit, onOpen: 
                     Column(Modifier.padding(12.dp)) {
                         Text(item.partyName, fontWeight = FontWeight.Bold)
                         Text("المتبقي ${formatMoney(item.remainingCents)}", color = DebtRed)
-                        Text("الاستحقاق ${SimpleDateFormat("d MMM yyyy", Locale("ar")).format(Date(item.dueAt))}", color = TextSecondary)
+                        Text("الاستحقاق ${SimpleDateFormat("d MMM yyyy", Locale("ar")).format(Date(item.dueAt)).toEnglishDigits()}", color = TextSecondary)
                     }
                 }
             }

@@ -39,7 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.ui.theme.BorderColor
 import com.dioonplus.app.ui.theme.DebtRed
@@ -154,52 +156,56 @@ fun PinLockScreen(onUnlock: (String) -> Boolean) {
                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.72f)),
                 shadowElevation = 10.dp,
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(11.dp),
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalLayoutDirection provides LayoutDirection.Ltr,
                 ) {
-                    listOf(
-                        listOf("1", "2", "3"),
-                        listOf("4", "5", "6"),
-                        listOf("7", "8", "9"),
-                    ).forEach { row ->
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(11.dp),
+                    ) {
+                        listOf(
+                            listOf("1", "2", "3"),
+                            listOf("4", "5", "6"),
+                            listOf("7", "8", "9"),
+                        ).forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                            ) {
+                                row.forEach { digit ->
+                                    NumberKey(label = digit, onClick = { appendDigit(digit) })
+                                }
+                            }
+                        }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            row.forEach { digit ->
-                                NumberKey(label = digit, onClick = { appendDigit(digit) })
+                            ActionKey(
+                                enabled = pin.isNotEmpty(),
+                                onClick = {
+                                    if (pin.isNotEmpty()) {
+                                        pin = pin.dropLast(1)
+                                        invalid = false
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.Backspace,
+                                    contentDescription = "حذف رقم",
+                                    tint = if (pin.isNotEmpty()) DioonBlueDark else TextSecondary.copy(alpha = 0.38f),
+                                )
                             }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ActionKey(
-                            enabled = pin.isNotEmpty(),
-                            onClick = {
-                                if (pin.isNotEmpty()) {
-                                    pin = pin.dropLast(1)
-                                    invalid = false
-                                }
-                            },
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.Backspace,
-                                contentDescription = "حذف رقم",
-                                tint = if (pin.isNotEmpty()) DioonBlueDark else TextSecondary.copy(alpha = 0.38f),
-                            )
-                        }
-                        NumberKey(label = "0", onClick = { appendDigit("0") })
-                        ActionKey(
-                            enabled = pin.length in 4..6,
-                            primary = true,
-                            onClick = ::submit,
-                        ) {
-                            Icon(Icons.Outlined.Check, contentDescription = "فتح التطبيق", tint = Color.White)
+                            NumberKey(label = "0", onClick = { appendDigit("0") })
+                            ActionKey(
+                                enabled = pin.length in 4..6,
+                                primary = true,
+                                onClick = ::submit,
+                            ) {
+                                Icon(Icons.Outlined.Check, contentDescription = "فتح التطبيق", tint = Color.White)
+                            }
                         }
                     }
                 }

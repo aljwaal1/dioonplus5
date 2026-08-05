@@ -39,6 +39,7 @@ import com.dioonplus.app.util.CurrencySettings
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatMoney
 import com.dioonplus.app.util.parseMoneyToCents
+import com.dioonplus.app.util.toEnglishDigits
 import java.math.BigDecimal
 import java.text.SimpleDateFormat
 import java.util.*
@@ -210,5 +211,6 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
 }
 
 private fun centsToInput(cents: Long) = BigDecimal.valueOf(cents,3).stripTrailingZeros().toPlainString()
-private fun formatDate(timestamp: Long) = SimpleDateFormat("d MMMM yyyy", Locale("ar")).format(Date(timestamp))
+private fun formatDate(timestamp: Long) =
+    SimpleDateFormat("d MMMM yyyy", Locale("ar")).format(Date(timestamp)).toEnglishDigits()
 private fun dueColor(timestamp: Long): Color { val today = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY,0); set(Calendar.MINUTE,0); set(Calendar.SECOND,0); set(Calendar.MILLISECOND,0) }.timeInMillis; return if (timestamp < today) DebtRed else DioonBlueDark }

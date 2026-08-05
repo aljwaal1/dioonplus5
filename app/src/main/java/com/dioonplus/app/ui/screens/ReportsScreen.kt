@@ -82,6 +82,7 @@ import com.dioonplus.app.util.fileSafeDate
 import com.dioonplus.app.util.formatDateTime
 import com.dioonplus.app.util.formatDay
 import com.dioonplus.app.util.formatMoney
+import com.dioonplus.app.util.toEnglishDigits
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -723,7 +724,7 @@ private fun endOfDay(timestamp: Long): Long = Calendar.getInstance().apply {
 }.timeInMillis
 
 private fun formatShortDate(timestamp: Long): String =
-    SimpleDateFormat("yyyy/MM/dd", Locale("ar")).format(Date(timestamp))
+    SimpleDateFormat("yyyy/MM/dd", Locale("ar")).format(Date(timestamp)).toEnglishDigits()
 
 private fun showDatePicker(context: Context, initial: Long, onSelected: (Long) -> Unit) {
     val calendar = Calendar.getInstance().apply { timeInMillis = initial }
