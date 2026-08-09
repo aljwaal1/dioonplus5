@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.dioonplus.app.security.AppPreferences
+import com.dioonplus.app.ui.components.AdMobBanner
 import com.dioonplus.app.ui.screens.HomeScreen
 import com.dioonplus.app.ui.screens.PartyDetailsScreen
 import com.dioonplus.app.ui.screens.PinLockScreen
@@ -99,12 +100,17 @@ fun DioonPlusApp() {
         } else {
             val selectedParty = appState.selectedParty
             if (selectedParty != null) {
-                PartyDetailsScreen(
-                    appState = appState,
-                    party = selectedParty,
-                    preferences = preferences,
-                    onBack = appState::closeParty,
-                )
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        PartyDetailsScreen(
+                            appState = appState,
+                            party = selectedParty,
+                            preferences = preferences,
+                            onBack = appState::closeParty,
+                        )
+                    }
+                    AdMobBanner()
+                }
             } else {
                 var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
                 val destinations = listOf(
@@ -117,29 +123,32 @@ fun DioonPlusApp() {
                     modifier = Modifier.fillMaxSize(),
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
-                        NavigationBar(
-                            modifier = Modifier.navigationBarsPadding(),
-                            tonalElevation = 6.dp,
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            windowInsets = WindowInsets(0, 0, 0, 0),
-                        ) {
-                            destinations.forEachIndexed { index, item ->
-                                NavigationBarItem(
-                                    selected = selectedIndex == index,
-                                    onClick = {
-                                        selectedIndex = index
-                                        appState.refreshAll()
-                                    },
-                                    icon = { Icon(item.icon, contentDescription = item.label) },
-                                    label = { Text(item.label) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = DioonBlue,
-                                        selectedTextColor = DioonBlue,
-                                        indicatorColor = DioonBlue.copy(alpha = 0.10f),
-                                        unselectedIconColor = TextSecondary,
-                                        unselectedTextColor = TextSecondary,
-                                    ),
-                                )
+                        Column {
+                            AdMobBanner()
+                            NavigationBar(
+                                modifier = Modifier.navigationBarsPadding(),
+                                tonalElevation = 6.dp,
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                windowInsets = WindowInsets(0, 0, 0, 0),
+                            ) {
+                                destinations.forEachIndexed { index, item ->
+                                    NavigationBarItem(
+                                        selected = selectedIndex == index,
+                                        onClick = {
+                                            selectedIndex = index
+                                            appState.refreshAll()
+                                        },
+                                        icon = { Icon(item.icon, contentDescription = item.label) },
+                                        label = { Text(item.label) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = DioonBlue,
+                                            selectedTextColor = DioonBlue,
+                                            indicatorColor = DioonBlue.copy(alpha = 0.10f),
+                                            unselectedIconColor = TextSecondary,
+                                            unselectedTextColor = TextSecondary,
+                                        ),
+                                    )
+                                }
                             }
                         }
                     },
