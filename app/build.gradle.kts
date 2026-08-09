@@ -4,6 +4,14 @@ plugins {
 }
 
 val ciTestKeystore = rootProject.file(".github/ci/dioonplus-test.jks")
+val releaseKeystore = rootProject.file("release-keystore.jks")
+val releaseStorePassword = System.getenv("DIOON_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("DIOON_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("DIOON_KEY_PASSWORD")
+val hasReleaseSigning = releaseKeystore.exists() &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
 
 android {
     namespace = "com.dioonplus.app"
@@ -29,12 +37,26 @@ android {
                 keyPassword = "dioonplus-test-2026"
             }
         }
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         getByName("debug") {
             if (ciTestKeystore.exists()) {
                 signingConfig = signingConfigs.getByName("ciTest")
+            }
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
@@ -70,4 +92,4 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// Closed testing release build: 0.5.3
+// Google Play closed testing release: 0.5.3
