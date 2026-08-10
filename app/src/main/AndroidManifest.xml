@@ -12,10 +12,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.DioonPlus">
 
-        <!-- Official Google test App ID. Replace with the real AdMob App ID before production. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="ca-app-pub-3082968903080396~1145226510" />
 
         <activity
             android:name=".MainActivity"
