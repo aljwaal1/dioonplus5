@@ -1,5 +1,6 @@
 package com.dioonplus.app.ui.components
 
+import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -12,14 +13,16 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 
-private const val BANNER_AD_UNIT_ID = "ca-app-pub-3082968903080396/6840406325"
+private const val TEST_BANNER_AD_UNIT_ID = "ca-app-pub-3940256099942544/9214589741"
+private const val PRODUCTION_BANNER_AD_UNIT_ID = "ca-app-pub-3082968903080396/6840406325"
 
 @Composable
 fun AdMobBanner(
     modifier: Modifier = Modifier,
-    adUnitId: String = BANNER_AD_UNIT_ID,
 ) {
     val context = LocalContext.current
+    val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    val adUnitId = if (isDebuggable) TEST_BANNER_AD_UNIT_ID else PRODUCTION_BANNER_AD_UNIT_ID
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val widthDp = maxWidth.value.toInt().coerceAtLeast(320)
