@@ -12,12 +12,12 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 
-private const val TEST_BANNER_AD_UNIT_ID = "ca-app-pub-3940256099942544/9214589741"
+private const val BANNER_AD_UNIT_ID = "ca-app-pub-3082968903080396/6840406325"
 
 @Composable
 fun AdMobBanner(
     modifier: Modifier = Modifier,
-    adUnitId: String = TEST_BANNER_AD_UNIT_ID,
+    adUnitId: String = BANNER_AD_UNIT_ID,
 ) {
     val context = LocalContext.current
 
