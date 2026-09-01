@@ -21,8 +21,8 @@ android {
         applicationId = "com.dioonplus.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.5.5"
+        versionCode = 15
+        versionName = "0.5.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -93,4 +93,4 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// Google Play closed testing release: 0.5.5
+// Google Play production update: 0.5.6
