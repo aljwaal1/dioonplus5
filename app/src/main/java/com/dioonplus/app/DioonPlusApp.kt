@@ -109,7 +109,7 @@ fun DioonPlusApp() {
                             onBack = appState::closeParty,
                         )
                     }
-                    AdMobBanner()
+                    AdMobBanner(modifier = Modifier.navigationBarsPadding())
                 }
             } else {
                 var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -124,9 +124,7 @@ fun DioonPlusApp() {
                     containerColor = MaterialTheme.colorScheme.background,
                     bottomBar = {
                         Column {
-                            AdMobBanner()
                             NavigationBar(
-                                modifier = Modifier.navigationBarsPadding(),
                                 tonalElevation = 6.dp,
                                 containerColor = MaterialTheme.colorScheme.surface,
                                 windowInsets = WindowInsets(0, 0, 0, 0),
@@ -150,6 +148,7 @@ fun DioonPlusApp() {
                                     )
                                 }
                             }
+                            AdMobBanner(modifier = Modifier.navigationBarsPadding())
                         }
                     },
                 ) { innerPadding ->
