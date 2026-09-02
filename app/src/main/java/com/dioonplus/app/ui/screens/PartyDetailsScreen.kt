@@ -53,12 +53,23 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
     var pendingDeleteEntry by remember { mutableStateOf<LedgerEntry?>(null) }
     var showEditParty by remember { mutableStateOf(false) }
     var showDeleteParty by remember { mutableStateOf(false) }
+    var debtSaveConfirmation by remember { mutableStateOf(0) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val tone = remember { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 45) }
     val haptic = LocalHapticFeedback.current
     DisposableEffect(Unit) { onDispose { tone.release() } }
+    LaunchedEffect(debtSaveConfirmation) {
+        if (debtSaveConfirmation > 0) {
+            snackbarHostState.showSnackbar(
+                message = "تم تسجيل الدين بنجاح",
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Surface(Modifier.statusBarsPadding(), color = Color.White, shadowElevation = 2.dp) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -95,7 +106,7 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
 
     addEntryType?.let { type -> EntryEditorDialog(type, null, { addEntryType = null }) { selectedType, amount, note, createdAt, dueAt ->
         val cents = parseMoneyToCents(amount) ?: return@EntryEditorDialog false
-        appState.addEntry(selectedType, cents, note, createdAt, dueAt).also { if (it) { if (preferences.soundEnabled) tone.startTone(ToneGenerator.TONE_PROP_ACK, 120); if (preferences.vibrationEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress); addEntryType = null } }
+        appState.addEntry(selectedType, cents, note, createdAt, dueAt).also { if (it) { if (preferences.soundEnabled) tone.startTone(ToneGenerator.TONE_PROP_ACK, 120); if (preferences.vibrationEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress); addEntryType = null; debtSaveConfirmation++ } }
     } }
 
     editingEntry?.let { entry -> EntryEditorDialog(entry.type, entry, { editingEntry = null }) { selectedType, amount, note, createdAt, dueAt ->
