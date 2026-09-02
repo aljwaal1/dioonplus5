@@ -73,7 +73,13 @@ fun PartyDetailsScreen(appState: DioonAppState, party: Party, preferences: AppPr
         topBar = {
             Surface(Modifier.statusBarsPadding(), color = Color.White, shadowElevation = 2.dp) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "رجوع") }
+                    IconButton(onClick = onBack, modifier = Modifier.size(52.dp)) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            "رجوع",
+                            modifier = Modifier.size(30.dp),
+                        )
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(party.name, style = MaterialTheme.typography.titleLarge)
                         Text((if (party.type == PartyType.CUSTOMER) "عميل" else "مورد") + if (party.phone.isBlank()) "" else " • ${party.phone}", color = TextSecondary)
